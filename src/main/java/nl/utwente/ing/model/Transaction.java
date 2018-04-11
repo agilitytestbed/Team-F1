@@ -29,6 +29,7 @@ public class Transaction {
     private Integer id;
     private String date;
     private Long amount;
+    private String description;
     private String externalIBAN;
     private Type type;
     private Category category;
@@ -38,8 +39,8 @@ public class Transaction {
      * @param id transaction id
      * @param amount transaction amount in cents
      */
-    public Transaction(Integer id, String date, Long amount, String externalIBAN, Type type) {
-        this(id, date, amount, externalIBAN, type,null);
+    public Transaction(Integer id, String date, Long amount, String description, String externalIBAN, Type type) {
+        this(id, date, amount, description, externalIBAN, type,null);
     }
 
     /**
@@ -50,10 +51,11 @@ public class Transaction {
      * @param type type of transaction
      * @param category transaction category
      */
-    public Transaction(Integer id, String date, Long amount, String externalIBAN, Type type, Category category) {
+    public Transaction(Integer id, String date, Long amount, String description, String externalIBAN, Type type, Category category) {
         this.id = id;
         this.date = date;
         this.amount = amount;
+        this.description = description;
         this.externalIBAN = externalIBAN;
         this.type = type;
         this.category = category;
@@ -70,6 +72,10 @@ public class Transaction {
 
     public Long getAmount() {
         return amount;
+    }
+
+    public String getDescription() {
+        return description;
     }
 
     public String getExternalIBAN() {
