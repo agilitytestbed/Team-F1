@@ -55,6 +55,7 @@ public class TransactionController {
                                      @RequestParam(value = "limit", defaultValue = "20") int limit,
                                      @RequestParam(value = "category", required = false) String category,
                                      HttpServletResponse response) {
+        String sessionID = headerSessionID != null ? headerSessionID : querySessionID;
 
         String transactionsQuery = "SELECT DISTINCT t.transaction_id, t.date, t.amount, t.description, t.external_iban, t.type, " +
                 "CASE WHEN t.category_id IS NULL THEN NULL ELSE c.category_id END AS category_id, " +
@@ -62,7 +63,6 @@ public class TransactionController {
                 "FROM (transactions t LEFT JOIN categories c ON 1=1) " +
                 "WHERE t.session_id = ? " +
                 "AND (t.category_id IS NULL OR c.category_id = t.category_id)";
-        String sessionID = headerSessionID != null ? headerSessionID : querySessionID;
 
         if (category != null) {
             transactionsQuery += "AND c.name = ?";
@@ -142,8 +142,23 @@ public class TransactionController {
                 throw new JsonSyntaxException("Transaction is missing attributes");
             }
 
-            String query = "INSERT INTO transactions (date, amount, description, external_iban, category_id, type, session_id) VALUES " +
-                    "(?, ?, ?, ?, ?, ?, ?);";
+            String query;
+            if (transaction.getCategory() != null) {
+                query = "INSERT INTO transactions (date, amount, description, external_iban, category_id, type, session_id) VALUES " +
+                        "(?, ?, ?, ?, ?, ?, ?); ";
+            } else {
+                // In case no category was specified we check all of the category rules to see if one matches this
+                // transaction and use the category_id associated with that category rule.
+                query = "INSERT INTO transactions (date, amount, description, external_iban, category_id, type, session_id) VALUES " +
+                        "(?, ?, ?, ?, (SELECT category_id " +
+                        "FROM categoryrules " +
+                        "WHERE (description = ? OR description = '') " +
+                        "AND (iban = ? OR iban = '') " +
+                        "AND (type = ? OR type = '') " +
+                        "LIMIT 1), " +
+                        "?, ?);";
+            }
+
             String resultQuery = "SELECT last_insert_rowid() FROM transactions LIMIT 1;";
 
             try (Connection connection = DBConnection.instance.getConnection();
@@ -156,10 +171,15 @@ public class TransactionController {
                 statement.setString(4, transaction.getExternalIBAN());
                 if (transaction.getCategory() != null) {
                     statement.setInt(5, transaction.getCategory().getId());
+                    statement.setString(6, transaction.getType().toString().toLowerCase());
+                    statement.setString(7, sessionID);
+                } else {
+                    statement.setString(5, transaction.getDescription());
+                    statement.setString(6, transaction.getExternalIBAN());
+                    statement.setString(7, transaction.getType().toString().toLowerCase());
+                    statement.setString(8, transaction.getType().toString().toLowerCase());
+                    statement.setString(9, sessionID);
                 }
-
-                statement.setString(6, transaction.getType().toString().toLowerCase());
-                statement.setString(7, sessionID);
 
                 if (statement.executeUpdate() != 1) {
                     response.setStatus(405);
@@ -288,6 +308,8 @@ public class TransactionController {
                 statement.setString(7, sessionID);
                 if (statement.executeUpdate() == 1) {
                     response.setStatus(200);
+                    // This uses the getTransaction endpoint instead of just serializing the transaction object ..
+                    // .. as not all fields are known at time of creation (e.g. the Category).
                     return getTransaction(headerSessionID, querySessionID, transactionId, response);
                 } else {
                     response.setStatus(404);
