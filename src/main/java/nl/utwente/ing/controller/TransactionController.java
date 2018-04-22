@@ -45,8 +45,16 @@ import java.util.List;
 public class TransactionController {
 
     /**
-     * Returns a list of all the transactions that are available to the session id.
-     * @param response to edit the status code of the response
+     * Returns a list of all the transactions that are available to the session ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param offset the number of items to skip before starting to collect the result set
+     * @param limit the amount of items to return
+     * @param category the category used to filter the transactions
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of all transactions
+     * @see Transaction
      */
     @RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
     public String getAllTransactions(@RequestHeader(value = "X-session-id", required = false) String headerSessionID,
@@ -120,8 +128,15 @@ public class TransactionController {
     }
 
     /**
-     * Creates a new transaction that is linked to the current sessions id.
-     * @param response to edit the status code of the response
+     * Creates a new Transaction that is linked to the current session ID. Expects the body to be formatted according
+     * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours/1.2.1">API specification</a>.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param body the request body containing the JSON representation of the Transaction to add
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the newly added Transaction
+     * @see Transaction
      */
     @RequestMapping(value = "", method = RequestMethod.POST, produces = "application/json")
     public String createTransaction(@RequestHeader(value = "X-session-id", required = false) String headerSessionID,
@@ -209,13 +224,19 @@ public class TransactionController {
     }
 
     /**
-     * Returns a specific transaction corresponding to the transaction id.
-     * @param response to edit the status code of the response
+     * Returns a specific Transaction corresponding to the transaction ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param transactionID the transaction ID corresponding to the transaction to return
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the specified Transaction
+     * @see Transaction
      */
     @RequestMapping(value = "/{transactionId}", method = RequestMethod.GET, produces = "application/json")
     public String getTransaction(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                  @RequestParam(value = "session_id", required = false) String querySessionID,
-                                 @PathVariable("transactionId") int transactionId,
+                                 @PathVariable("transactionId") int transactionID,
                                  HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
 
@@ -231,7 +252,7 @@ public class TransactionController {
              PreparedStatement statement = connection.prepareStatement(query)
         ) {
             statement.setString(1, sessionID);
-            statement.setInt(2, transactionId);
+            statement.setInt(2, transactionID);
             ResultSet result = statement.executeQuery();
             if (result.next()) {
                 // This check ensures that the status code is not overwritten if a different method has set it.
@@ -270,13 +291,20 @@ public class TransactionController {
     }
 
     /**
-     * Updates the given transaction corresponding to the transaction id.
-     * @param response to edit the status code of the response
+     * Updates the given transaction corresponding to the transaction ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param transactionID the transaction ID corresponding to the transaction to update
+     * @param body the request body containing the JSON representation of the Transaction to update
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the updated Transaction
+     * @see Transaction
      */
     @RequestMapping(value = "/{transactionId}", method = RequestMethod.PUT, produces = "application/json")
     public String updateTransaction(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                     @RequestParam(value = "session_id", required = false) String querySessionID,
-                                    @PathVariable("transactionId") int transactionId,
+                                    @PathVariable("transactionId") int transactionID,
                                     @RequestBody String body,
                                     HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
@@ -287,7 +315,7 @@ public class TransactionController {
             Gson gson = gsonBuilder.create();
 
             Transaction transaction = gson.fromJson(body, Transaction.class);
-            transaction.setId(transactionId);
+            transaction.setId(transactionID);
 
             if (transaction.getDate() == null || transaction.getAmount() == null
                     || transaction.getExternalIBAN() == null || transaction.getType() == null) {
@@ -305,13 +333,13 @@ public class TransactionController {
                 statement.setString(3, transaction.getDescription());
                 statement.setString(4, transaction.getExternalIBAN());
                 statement.setString(5, transaction.getType().toString().toLowerCase());
-                statement.setInt(6, transactionId);
+                statement.setInt(6, transactionID);
                 statement.setString(7, sessionID);
                 if (statement.executeUpdate() == 1) {
                     response.setStatus(200);
                     // This uses the getTransaction endpoint instead of just serializing the transaction object ..
                     // .. as not all fields are known at time of creation (e.g. the Category).
-                    return getTransaction(headerSessionID, querySessionID, transactionId, response);
+                    return getTransaction(headerSessionID, querySessionID, transactionID, response);
                 } else {
                     response.setStatus(404);
                     return null;
@@ -329,27 +357,38 @@ public class TransactionController {
     }
 
     /**
-     * Deletes the transaction corresponding to the given transaction id.
-     * @param response to edit the status code of the response
+     * Deletes the transaction corresponding to the given transaction ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param transactionID the transaction ID corresponding to the transaction to delete
+     * @param response the response shown to the user, necessary to edit the status code of the response
      */
     @RequestMapping(value = "/{transactionId}", method = RequestMethod.DELETE)
     public void deleteTransaction(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                   @RequestParam(value = "session_id", required = false) String querySessionID,
-                                  @PathVariable("transactionId") int transactionId,
+                                  @PathVariable("transactionId") int transactionID,
                                   HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
         String query = "DELETE FROM transactions WHERE transaction_id = ? AND session_id = ?";
-        DBUtil.executeDelete(response, query, transactionId, sessionID);
+        DBUtil.executeDelete(response, query, transactionID, sessionID);
     }
 
     /**
-     * Assigns a category to the specified transaction corresponding to the transaction id.
-     * @param response to edit the status code of the response.
+     * Assigns a category to the specified transaction corresponding to the transaction ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param transactionID the transaction ID corresponding to the transaction to update
+     * @param body the request body containing the JSON representation of the Category to assign
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a serialized representation of the newly added Transaction
+     * @see Transaction
      */
     @RequestMapping(value = "/{transactionId}/category", method = RequestMethod.PATCH, produces = "application/json")
     public String assignCategoryToTransaction(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                               @RequestParam(value = "session_id", required = false) String querySessionID,
-                                              @PathVariable("transactionId") int transactionId,
+                                              @PathVariable("transactionId") int transactionID,
                                               @RequestBody String body,
                                               HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
@@ -368,10 +407,10 @@ public class TransactionController {
              PreparedStatement statement = connection.prepareStatement(query)
         ) {
             statement.setInt(1, categoryId);
-            statement.setInt(2, transactionId);
+            statement.setInt(2, transactionID);
             statement.setString(3, sessionID);
             if (statement.executeUpdate() == 1) {
-                return getTransaction(headerSessionID, querySessionID, transactionId, response);
+                return getTransaction(headerSessionID, querySessionID, transactionID, response);
             } else {
                 response.setStatus(404);
                 return null;
@@ -394,6 +433,11 @@ public class TransactionController {
 
 class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerializer<Transaction> {
 
+    /**
+     * A custom deserializer for GSON to use to deserialize a Transaction formatted according to the API specification
+     * to Transaction object. Ensures that the amount field is properly converted to cents to work with the internally
+     * used format.
+     */
     @Override
     public Transaction deserialize(JsonElement json, java.lang.reflect.Type type,
                                    JsonDeserializationContext jsonDeserializationContext) throws JsonParseException {
@@ -418,6 +462,11 @@ class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerialize
         return new Transaction(null, date, amount, description, externalIBAN, transactionType, category);
     }
 
+    /**
+     * A custom serializer for GSON to use to serialize a Transaction into the proper JSON representation formatted
+     * according to the API. Does not serialize null values unlike the default serializer. Formats the amount according
+     * to the specification as they are internally stored in a double as cents.
+     */
     @Override
     public JsonElement serialize(Transaction transaction, java.lang.reflect.Type type,
                                  JsonSerializationContext jsonSerializationContext) {
