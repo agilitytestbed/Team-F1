@@ -162,9 +162,9 @@ public class CategoryRuleController {
 
     @RequestMapping(value = "/{id}", method = RequestMethod.GET, produces = "application/json")
     public String getCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
-                                        @RequestParam(value = "session_id", required = false) String querySessionID,
-                                        @PathVariable("id") int id,
-                                        HttpServletResponse response) {
+                                  @RequestParam(value = "session_id", required = false) String querySessionID,
+                                  @PathVariable("id") int id,
+                                  HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
 
         String query = "SELECT c.categoryrule_id, c.description, c.iban, c.type, c.category_id, c.apply_on_history " +
@@ -201,10 +201,10 @@ public class CategoryRuleController {
 
     @RequestMapping(value = "/{id}", method = RequestMethod.PUT, produces = "application/json")
     public String putCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
-                                        @RequestParam(value = "session_id", required = false) String querySessionID,
-                                        @PathVariable("id") int id,
-                                        @RequestBody String body,
-                                        HttpServletResponse response) {
+                                  @RequestParam(value = "session_id", required = false) String querySessionID,
+                                  @PathVariable("id") int id,
+                                  @RequestBody String body,
+                                  HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
 
         try {
@@ -252,9 +252,9 @@ public class CategoryRuleController {
 
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
     public void deleteCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
-                                           @RequestParam(value = "session_id", required = false) String querySessionID,
-                                           @PathVariable("id") int id,
-                                           HttpServletResponse response) {
+                                   @RequestParam(value = "session_id", required = false) String querySessionID,
+                                   @PathVariable("id") int id,
+                                   HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
         String query = "DELETE FROM categoryrules WHERE categoryrule_id = ? AND session_id = ?";
         DBUtil.executeDelete(response, query, id, sessionID);

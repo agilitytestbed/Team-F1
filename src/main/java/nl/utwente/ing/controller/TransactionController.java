@@ -125,9 +125,9 @@ public class TransactionController {
      */
     @RequestMapping(value = "", method = RequestMethod.POST, produces = "application/json")
     public String createTransaction(@RequestHeader(value = "X-session-id", required = false) String headerSessionID,
-                                         @RequestParam(value = "session_id", required = false) String querySessionID,
-                                         @RequestBody String body,
-                                         HttpServletResponse response) {
+                                    @RequestParam(value = "session_id", required = false) String querySessionID,
+                                    @RequestBody String body,
+                                    HttpServletResponse response) {
         String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
 
         try {
@@ -155,6 +155,7 @@ public class TransactionController {
                         "WHERE (description = ? OR description = '') " +
                         "AND (iban = ? OR iban = '') " +
                         "AND (type = ? OR type = '') " +
+                        "AND (category_id IS NOT NULL) " + // In case the category was removed.
                         "LIMIT 1), " +
                         "?, ?);";
             }
