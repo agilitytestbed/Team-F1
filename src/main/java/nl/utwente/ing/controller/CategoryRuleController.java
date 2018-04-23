@@ -42,6 +42,15 @@ import java.util.List;
 @RequestMapping("/api/v1/categoryRules")
 public class CategoryRuleController {
 
+    /**
+     * Returns a list of all the category rules that are available to the session ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of all category rules
+     * @see CategoryRule
+     */
     @RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
     public String getCategoryRules(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                    @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -79,6 +88,17 @@ public class CategoryRuleController {
         }
     }
 
+    /**
+     * Creates a new CategoryRule that is linked to the current session ID. Expects the body to be formatted according
+     * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours-CategoryRules/">API specification</a>.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param body the request body containing the JSON representation of the CategoryRule to add
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the newly added CategoryRule
+     * @see CategoryRule
+     */
     @RequestMapping(value = "", method = RequestMethod.POST, produces = "application/json")
     public String addCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                   @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -160,6 +180,16 @@ public class CategoryRuleController {
         }
     }
 
+    /**
+     * Returns a specific CategoryRule corresponding to the category rule ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param id the category rule ID corresponding to the category rule to return
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the specified CategoryRule
+     * @see CategoryRule
+     */
     @RequestMapping(value = "/{id}", method = RequestMethod.GET, produces = "application/json")
     public String getCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                   @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -199,6 +229,17 @@ public class CategoryRuleController {
         }
     }
 
+    /**
+     * Updates the given category rule corresponding to the category rule ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param id the category rule ID corresponding to the category rule to update
+     * @param body the request body containing the JSON representation of the CategoryRule to update
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the updated CategoryRule
+     * @see CategoryRule
+     */
     @RequestMapping(value = "/{id}", method = RequestMethod.PUT, produces = "application/json")
     public String putCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                   @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -250,6 +291,14 @@ public class CategoryRuleController {
         }
     }
 
+    /**
+     * Deletes the category rule corresponding to the given category rule ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param id the category rule ID corresponding to the category to delete
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     */
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
     public void deleteCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                    @RequestParam(value = "session_id", required = false) String querySessionID,
