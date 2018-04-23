@@ -40,6 +40,15 @@ import java.util.List;
 @RequestMapping("/api/v1/categories")
 public class CategoryController {
 
+    /**
+     * Returns a list of all the categories that are available to the session ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of all categories
+     * @see Category
+     */
     @RequestMapping(value = "", method = RequestMethod.GET)
     public List<Category> getCategories(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                         @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -68,6 +77,17 @@ public class CategoryController {
         }
     }
 
+    /**
+     * Creates a new Category that is linked to the current session ID. Expects the body to be formatted according
+     * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours/1.2.1">API specification</a>.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param body the request body containing the JSON representation of the Category to add
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the newly added Category
+     * @see Category
+     */
     @RequestMapping(value = "", method = RequestMethod.POST)
     public Category addCategory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                 @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -118,6 +138,16 @@ public class CategoryController {
         }
     }
 
+    /**
+     * Returns a specific Category corresponding to the category ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param id the category ID corresponding to the category to return
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the specified Category
+     * @see Category
+     */
     @RequestMapping(value = "/{id}", method = RequestMethod.GET)
     public Category getCategory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                 @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -146,6 +176,17 @@ public class CategoryController {
         }
     }
 
+    /**
+     * Updates the given category corresponding to the category ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param id the category ID corresponding to the category to update
+     * @param body the request body containing the JSON representation of the Category to update
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the updated Category
+     * @see Category
+     */
     @RequestMapping(value = "/{id}", method = RequestMethod.PUT)
     public Category putCategory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                 @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -190,6 +231,14 @@ public class CategoryController {
         }
     }
 
+    /**
+     * Deletes the category corresponding to the given category ID.
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param id the category ID corresponding to the category to delete
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     */
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
     public void deleteCategory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                @RequestParam(value = "session_id", required = false) String querySessionID,
