@@ -40,6 +40,12 @@ import java.util.UUID;
 @RequestMapping("/api/v1/sessions")
 public class SessionController {
 
+    /**
+     * Generates a new session ID to be used in future API requests as authentication.
+     *
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the generated session
+     */
     @RequestMapping(value = "", method = RequestMethod.POST)
     public String getSession(HttpServletResponse response) {
         try {
@@ -64,6 +70,13 @@ public class SessionController {
         }
     }
 
+    /**
+     * Checks whether a session is valid, i.e. not null and the session ID exists in the database.
+     *
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param sessionID the session ID for which to check validity
+     * @return <code>true</code> if the session is not null and exists in the database; <code>false</code> otherwise
+     */
     public static boolean isValidSession(HttpServletResponse response, String sessionID) {
         if (sessionID == null) {
             response.setStatus(401);
@@ -84,6 +97,13 @@ public class SessionController {
         }
     }
 
+    /**
+     * Checks whether a session ID exists in the database.
+     *
+     * @param sessionId the session ID for which to check existence
+     * @return <code>true</code> if the session exists in the database; <code>false</code> otherwise
+     * @throws SQLException if an issue with the database connection occurred
+     */
     private static boolean checkSessionExists(String sessionId) throws SQLException {
         Connection connection = DBConnection.instance.getConnection();
         String query = "SELECT * FROM sessions WHERE session_id = ?";
