@@ -37,6 +37,8 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -433,6 +435,8 @@ public class TransactionController {
 
 class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerializer<Transaction> {
 
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+
     /**
      * A custom deserializer for GSON to use to deserialize a Transaction formatted according to the API specification
      * to Transaction object. Ensures that the amount field is properly converted to cents to work with the internally
@@ -443,17 +447,40 @@ class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerialize
                                    JsonDeserializationContext jsonDeserializationContext) throws JsonParseException {
         JsonObject jsonObject = json.getAsJsonObject();
 
-        String date = jsonObject.get("date").getAsString();
-        Long amount = Long.valueOf(jsonObject.get("amount").getAsString().replace(".", ""));
+        JsonElement dateElement = jsonObject.get("date");
+        JsonElement amountElement = jsonObject.get("amount");
+        JsonElement typeElement = jsonObject.get("type");
+        JsonElement ibanElement = jsonObject.get("externalIBAN");
+
+        // Check whether all the fields are present to avoid NullPointerExceptions later on.
+        if (dateElement == null || amountElement == null || typeElement == null || ibanElement == null) {
+            throw new JsonParseException("Missing one or more required fields");
+        }
+
+        String date;
+        try {
+            date = dateElement.getAsString();
+            // Check whether the date was formatted properly by parsing it.
+            DATE_FORMAT.parse(date);
+        } catch (ParseException e) {
+            throw new JsonParseException("Invalid date specified");
+        }
+
+        Long amount = Long.valueOf(amountElement.getAsString().replace(".", ""));
 
         // Description is not present in earlier versions of the API so might be left out, check for null for safety.
         JsonElement descriptionElement = jsonObject.get("description");
         String description = (descriptionElement == null) ? null : descriptionElement.getAsString();
 
-        String externalIBAN = jsonObject.get("externalIBAN").getAsString();
-        Type transactionType = Type.valueOf(jsonObject.get("type").getAsString());
-        Category category = null;
+        String externalIBAN = ibanElement.getAsString();
 
+        String typeString = typeElement.getAsString();
+        if (!("deposit".equals(typeString) || "withdrawal".equals(typeString))) {
+            throw new JsonParseException("Invalid type specified");
+        }
+        Type transactionType = Type.valueOf(typeString);
+
+        Category category = null;
         if (json.getAsJsonObject().has("category")) {
             category = new Category(jsonObject.get("category").getAsJsonObject().get("id").getAsInt(),
                     jsonObject.get("category").getAsJsonObject().get("name").getAsString());
@@ -465,7 +492,7 @@ class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerialize
     /**
      * A custom serializer for GSON to use to serialize a Transaction into the proper JSON representation formatted
      * according to the API. Does not serialize null values unlike the default serializer. Formats the amount according
-     * to the specification as they are internally stored in a double as cents.
+     * to the specification as they are internally stored in a long as cents.
      */
     @Override
     public JsonElement serialize(Transaction transaction, java.lang.reflect.Type type,
