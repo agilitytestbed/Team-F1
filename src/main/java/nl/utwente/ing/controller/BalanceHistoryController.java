@@ -45,6 +45,17 @@ public class BalanceHistoryController {
 
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
+    /**
+     * Returns the history of the balance of a bank account using candlestick datapoints. The result is formatted
+     * according to the API specification: https://app.swaggerhub.com/apis/djhuistra/INGHonours-balanceHistory/
+     *
+     * @param headerSessionID the session ID present in the header of the request
+     * @param querySessionID the session ID present in the URL of the request
+     * @param interval the interval period, such as a week or month
+     * @param count the number of interval items to return
+     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @return a JSON serialized representation of the bank account's history.
+     */
     @RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
     public String getBalanceHistory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                     @RequestParam(value = "session_id", required = false) String querySessionID,
@@ -213,6 +224,11 @@ public class BalanceHistoryController {
 
 class HistoryAdapter implements JsonSerializer<HistoryItem> {
 
+    /**
+     * A custom serializer for GSON to use to serialize a HistoryItem into the proper JSON representation formatted
+     * according to the API. Formats the monetary values according to the specification as they are internally
+     * stored in a long as cents.
+     */
     @Override
     public JsonElement serialize(HistoryItem historyItem, Type type, JsonSerializationContext jsonSerializationContext) {
         JsonObject object = new JsonObject();
