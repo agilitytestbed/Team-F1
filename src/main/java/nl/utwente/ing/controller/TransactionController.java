@@ -218,7 +218,7 @@ public class TransactionController {
                 response.setStatus(500);
                 return null;
             }
-        } catch (JsonSyntaxException | NumberFormatException e) {
+        } catch (JsonParseException | NumberFormatException e) {
             e.printStackTrace();
             response.setStatus(405);
             return null;
@@ -351,7 +351,7 @@ public class TransactionController {
                 response.setStatus(500);
                 return null;
             }
-        } catch (JsonSyntaxException | NumberFormatException e) {
+        } catch (JsonParseException | NumberFormatException e) {
             e.printStackTrace();
             response.setStatus(405);
             return null;
