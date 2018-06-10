@@ -147,7 +147,7 @@ public class BalanceHistoryController {
             List<HistoryItem> historyItems = new LinkedList<>();
 
             // Create an initial HistoryItem with the balance of the account as values.
-            HistoryItem currentItem = new HistoryItem(sum);
+            HistoryItem currentItem = new HistoryItem(sum, calendar.getTimeInMillis() / 1000);
             historyItems.add(currentItem);
 
             int groupCount = 0;
@@ -155,7 +155,8 @@ public class BalanceHistoryController {
             // In case there are no transactions, fill the results with groups representing the sum and no movement.
             if (transactionsSet.isAfterLast()) {
                 while (historyItems.size() < count) {
-                    historyItems.add(new HistoryItem(sum));
+                    calendar.add(intervalType, -1);
+                    historyItems.add(new HistoryItem(sum, calendar.getTimeInMillis() / 1000));
                 }
             }
 
@@ -165,9 +166,9 @@ public class BalanceHistoryController {
                 pointer.setTime(DATE_FORMAT.parse(transactionsSet.getString("date")));
 
                 while (calendar.after(pointer)) {
-                    currentItem = new HistoryItem(currentItem.getOpen());
-                    historyItems.add(currentItem);
                     calendar.add(intervalType, -1);
+                    currentItem = new HistoryItem(currentItem.getOpen(), calendar.getTimeInMillis() / 1000);
+                    historyItems.add(currentItem);
                 }
 
                 long amount = transactionsSet.getLong("amount");
@@ -186,9 +187,9 @@ public class BalanceHistoryController {
                     }
 
                     // Some data from the old group has to be carried over to the new group.
-                    currentItem = new HistoryItem(currentItem.getOpen());
-                    historyItems.add(currentItem);
                     calendar.add(intervalType, -1);
+                    currentItem = new HistoryItem(currentItem.getOpen(), calendar.getTimeInMillis() / 1000);
+                    historyItems.add(currentItem);
                 }
 
                 // Update the open value, which is the "current" value.
@@ -208,7 +209,8 @@ public class BalanceHistoryController {
             // In case not enough transactions were retrieved from the database to fill the count:
             // Similarly to the case of the empty set, create items of the last sum without any movement.
             while (historyItems.size() < count) {
-                historyItems.add(new HistoryItem(endSum));
+                calendar.add(intervalType, -1);
+                historyItems.add(new HistoryItem(endSum, calendar.getTimeInMillis() / 1000));
             }
 
             GsonBuilder gsonBuilder = new GsonBuilder();
@@ -238,6 +240,7 @@ class HistoryAdapter implements JsonSerializer<HistoryItem> {
         object.addProperty("high", historyItem.getHigh() / 100.0);
         object.addProperty("low", historyItem.getLow() / 100.0);
         object.addProperty("volume", historyItem.getVolume() / 100.0);
+        object.addProperty("timestamp", historyItem.getTimestamp());
         return object;
     }
 }

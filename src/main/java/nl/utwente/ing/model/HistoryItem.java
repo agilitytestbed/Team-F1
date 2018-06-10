@@ -30,12 +30,14 @@ public class HistoryItem {
     private long high;
     private long low;
     private long volume;
+    private long timestamp;
 
-    public HistoryItem(long start) {
+    public HistoryItem(long start, long timestamp) {
         this.open = start;
         this.close = start;
         this.high = start;
         this.low = start;
+        this.timestamp = timestamp;
     }
 
     public long getOpen() {
@@ -72,5 +74,9 @@ public class HistoryItem {
 
     public void setVolume(long volume) {
         this.volume = volume;
+    }
+
+    public long getTimestamp() {
+        return timestamp;
     }
 }
