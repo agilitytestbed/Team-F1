@@ -63,7 +63,7 @@ public class CategoryRuleController {
 
         try (Connection connection = DBConnection.instance.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(query)
-        ){
+        ) {
             preparedStatement.setString(1, sessionID);
             ResultSet resultSet = preparedStatement.executeQuery();
 
