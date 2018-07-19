@@ -80,6 +80,7 @@ public class SavingsGoalController {
             }
 
             response.setStatus(200);
+            connection.commit();
             return new GsonBuilder().create().toJson(results);
         } catch(SQLException e) {
             e.printStackTrace();
@@ -118,7 +119,6 @@ public class SavingsGoalController {
             String insertQuery = "INSERT INTO savingsgoals (name, goal, monthly, minbalance, session_id) " +
                     "VALUES (?, ?, ?, ?, ?);";
             String resultQuery = "SELECT last_insert_rowid() LIMIT 1;";
-            // TODO: These queries (and in all other controllers) should be executed in a single transaction.
 
             try (Connection connection = DBConnection.instance.getConnection();
                  PreparedStatement insertStatement = connection.prepareStatement(insertQuery);
@@ -132,6 +132,7 @@ public class SavingsGoalController {
 
                 if (insertStatement.executeUpdate() != 1) {
                     response.setStatus(405);
+                    connection.rollback();
                     return null;
                 }
 
@@ -140,9 +141,11 @@ public class SavingsGoalController {
                     savingsGoal.setId(resultSet.getInt(1));
                     savingsGoal.setBalance(0); // A new savings goal always has a balance of 0.
                     response.setStatus(201);
+                    connection.commit();
                     return new GsonBuilder().create().toJson(savingsGoal);
                 } else {
                     response.setStatus(405);
+                    connection.rollback();
                     return null;
                 }
             } catch (SQLException e) {

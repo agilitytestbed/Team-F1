@@ -48,20 +48,21 @@ public class SessionController {
      */
     @RequestMapping(value = "", method = RequestMethod.POST)
     public String getSession(HttpServletResponse response) {
-        try {
+        String query = "INSERT INTO sessions (session_id) VALUES (?);";
+
+        try (Connection connection = DBConnection.instance.getConnection();
+             PreparedStatement preparedStatement = connection.prepareStatement(query)
+        ) {
             String sessionId = UUID.randomUUID().toString();
             while (checkSessionExists(sessionId)) {
                 sessionId = UUID.randomUUID().toString();
             }
 
-            Connection connection = DBConnection.instance.getConnection();
-            String query = "INSERT INTO sessions (session_id) VALUES (?);";
-            PreparedStatement preparedStatement = connection.prepareStatement(query);
             preparedStatement.setString(1, sessionId);
             preparedStatement.executeUpdate();
-            preparedStatement.close();
 
             response.setStatus(201);
+            connection.commit();
             return String.format("{\"id\": \"%s\"}", sessionId);
         } catch (SQLException e) {
             e.printStackTrace();
@@ -73,7 +74,7 @@ public class SessionController {
     /**
      * Checks whether a session is valid, i.e. not null and the session ID exists in the database.
      *
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param response  the response shown to the user, necessary to edit the status code of the response
      * @param sessionID the session ID for which to check validity
      * @return <code>true</code> if the session is not null and exists in the database; <code>false</code> otherwise
      */
@@ -108,10 +109,11 @@ public class SessionController {
         Connection connection = DBConnection.instance.getConnection();
         String query = "SELECT * FROM sessions WHERE session_id = ?";
         PreparedStatement preparedStatement = connection.prepareStatement(query);
-        preparedStatement.setString(1,  sessionId);
+        preparedStatement.setString(1, sessionId);
         ResultSet result = preparedStatement.executeQuery();
         boolean exists = result.next();
         preparedStatement.close();
+        connection.commit();
         connection.close();
         return exists;
     }

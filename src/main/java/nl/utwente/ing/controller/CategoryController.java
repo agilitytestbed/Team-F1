@@ -32,7 +32,10 @@ import nl.utwente.ing.model.Category;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,8 +47,8 @@ public class CategoryController {
      * Returns a list of all the categories that are available to the session ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of all categories
      * @see Category
      */
@@ -58,7 +61,7 @@ public class CategoryController {
         String query = "SELECT c.category_id, c.name FROM categories c WHERE c.session_id = ?;";
         try (Connection connection = DBConnection.instance.getConnection();
              PreparedStatement preparedStatement = connection.prepareStatement(query)
-        ){
+        ) {
             preparedStatement.setString(1, sessionID);
             ResultSet resultSet = preparedStatement.executeQuery();
 
@@ -69,6 +72,7 @@ public class CategoryController {
                 results.add(new Category(id, name));
             }
 
+            connection.commit();
             return results;
         } catch (SQLException e) {
             e.printStackTrace();
@@ -82,9 +86,9 @@ public class CategoryController {
      * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours/1.2.1">API specification</a>.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param body the request body containing the JSON representation of the Category to add
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param body            the request body containing the JSON representation of the Category to add
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the newly added Category
      * @see Category
      */
@@ -121,9 +125,11 @@ public class CategoryController {
                 if (resultSet.next()) {
                     category.setId(resultSet.getInt(1));
                     response.setStatus(201);
+                    connection.commit();
                     return category;
                 } else {
                     response.setStatus(405);
+                    connection.rollback();
                     return null;
                 }
             } catch (SQLException e) {
@@ -142,9 +148,9 @@ public class CategoryController {
      * Returns a specific Category corresponding to the category ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category ID corresponding to the category to return
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category ID corresponding to the category to return
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the specified Category
      * @see Category
      */
@@ -164,9 +170,11 @@ public class CategoryController {
             ResultSet resultSet = statement.executeQuery();
             if (resultSet.next()) {
                 response.setStatus(200);
+                connection.commit();
                 return new Category(id, resultSet.getString(2));
             } else {
                 response.setStatus(404);
+                connection.rollback();
                 return null;
             }
         } catch (SQLException e) {
@@ -180,10 +188,10 @@ public class CategoryController {
      * Updates the given category corresponding to the category ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category ID corresponding to the category to update
-     * @param body the request body containing the JSON representation of the Category to update
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category ID corresponding to the category to update
+     * @param body            the request body containing the JSON representation of the Category to update
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the updated Category
      * @see Category
      */
@@ -214,9 +222,11 @@ public class CategoryController {
                 statement.setString(3, sessionID);
                 if (statement.executeUpdate() == 1) {
                     response.setStatus(200);
+                    connection.commit();
                     return category;
                 } else {
                     response.setStatus(404);
+                    connection.rollback();
                     return null;
                 }
             } catch (SQLException e) {
@@ -235,9 +245,9 @@ public class CategoryController {
      * Deletes the category corresponding to the given category ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category ID corresponding to the category to delete
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category ID corresponding to the category to delete
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      */
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
     public void deleteCategory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,

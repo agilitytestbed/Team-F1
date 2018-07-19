@@ -13,11 +13,11 @@ public class DBUtil {
      * to be the session ID of the owner of this object.
      * Example: DELETE FROM transactions WHERE transaction_id = ? AND session_id = ?
      *
-     * @param response the HttpServletResponse which will be updated with the result of the update
-     * @param query the query which is to be executed, which should contain two parameters. The first parameter should
-     *              be the ID of the object to delete, and the second parameter should be the session ID of the owner
-     *              of this object.
-     * @param id the ID of the object to delete
+     * @param response  the HttpServletResponse which will be updated with the result of the update
+     * @param query     the query which is to be executed, which should contain two parameters. The first parameter should
+     *                  be the ID of the object to delete, and the second parameter should be the session ID of the owner
+     *                  of this object.
+     * @param id        the ID of the object to delete
      * @param sessionID the session ID of the owner of the object to delete
      */
     public static void executeDelete(HttpServletResponse response, String query, int id, String sessionID) {
@@ -27,8 +27,10 @@ public class DBUtil {
             statement.setInt(1, id);
             statement.setString(2, sessionID);
             if (statement.executeUpdate() == 1) {
+                connection.commit();
                 response.setStatus(204);
             } else {
+                connection.rollback();
                 response.setStatus(404);
             }
         } catch (SQLException e) {

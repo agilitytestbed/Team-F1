@@ -24,7 +24,9 @@
  */
 package nl.utwente.ing.controller;
 
-import com.google.gson.*;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import nl.utwente.ing.controller.database.DBConnection;
 import nl.utwente.ing.controller.database.DBUtil;
 import nl.utwente.ing.model.CategoryRule;
@@ -46,8 +48,8 @@ public class CategoryRuleController {
      * Returns a list of all the category rules that are available to the session ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of all category rules
      * @see CategoryRule
      */
@@ -80,6 +82,7 @@ public class CategoryRuleController {
             }
 
             response.setStatus(200);
+            connection.commit();
             return new GsonBuilder().create().toJson(results);
         } catch (SQLException e) {
             e.printStackTrace();
@@ -93,9 +96,9 @@ public class CategoryRuleController {
      * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours-CategoryRules/">API specification</a>.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param body the request body containing the JSON representation of the CategoryRule to add
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param body            the request body containing the JSON representation of the CategoryRule to add
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the newly added CategoryRule
      * @see CategoryRule
      */
@@ -115,16 +118,39 @@ public class CategoryRuleController {
                 throw new JsonSyntaxException("CategoryRule is missing one or more elements");
             }
 
-            if (categoryRule.shouldApplyOnHistory()) {
-                // This query matches either the empty string (wildcard value) or the exact value.
-                String updateQuery = "UPDATE transactions SET category_id = ? " +
-                        "WHERE (? = \"\" OR description = ?) " +
-                        "AND (? = \"\" OR external_iban = ?) " +
-                        "AND (? = \"\" OR type = ?);";
+            // This query matches either the empty string (wildcard value) or the exact value.
+            String updateQuery = "UPDATE transactions SET category_id = ? " +
+                    "WHERE (? = '' OR description = ?) " +
+                    "AND (? = '' OR external_iban = ?) " +
+                    "AND (? = '' OR type = ?)" +
+                    "AND session_id = ?;";
+            // Checks whether the given category_id was available to the current user.
+            String conditionQuery = "SELECT * FROM categories WHERE category_id = ? AND session_id = ?;";
+            String insertQuery = "INSERT INTO categoryrules (description, iban, type, category_id, apply_on_history, session_id) " +
+                    "VALUES (?, ?, ?, ?, ?, ?);";
+            String resultQuery = "SELECT last_insert_rowid() FROM categoryrules LIMIT 1;";
 
-                try (Connection connection = DBConnection.instance.getConnection();
-                     PreparedStatement updateStatement = connection.prepareStatement(updateQuery)
-                ) {
+
+            try (Connection connection = DBConnection.instance.getConnection();
+                 PreparedStatement conditionStatement = connection.prepareStatement(conditionQuery);
+                 PreparedStatement updateStatement = connection.prepareStatement(updateQuery);
+                 PreparedStatement insertStatement = connection.prepareStatement(insertQuery);
+                 PreparedStatement resultStatement = connection.prepareStatement(resultQuery)
+            ) {
+                conditionStatement.setInt(1, categoryRule.getCategoryId());
+                conditionStatement.setString(2, sessionID);
+                ResultSet conditionSet = conditionStatement.executeQuery();
+
+                // Checks whether the given category_id was available to the current user.
+                if (!conditionSet.isBeforeFirst()) {
+                    // We return 404 so users cannot tell whether a session exists or not when it is not owned by them.
+                    response.setStatus(404);
+                    connection.commit();
+                    return null;
+                }
+
+                // Update the categories for existing transactions if applyOnHistory is true.
+                if (categoryRule.shouldApplyOnHistory()) {
                     updateStatement.setInt(1, categoryRule.getCategoryId());
                     updateStatement.setString(2, categoryRule.getDescription());
                     updateStatement.setString(3, categoryRule.getDescription());
@@ -132,22 +158,12 @@ public class CategoryRuleController {
                     updateStatement.setString(5, categoryRule.getIban());
                     updateStatement.setString(6, categoryRule.getType().toLowerCase());
                     updateStatement.setString(7, categoryRule.getType().toLowerCase());
+                    updateStatement.setString(8, sessionID);
                     updateStatement.executeUpdate();
-                } catch (SQLException | IllegalArgumentException e) {
-                    e.printStackTrace();
-                    response.setStatus(500);
-                    return null;
+                    connection.commit();
                 }
-            }
 
-            String insertQuery = "INSERT INTO categoryrules (description, iban, type, category_id, apply_on_history, session_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?);";
-            String resultQuery = "SELECT last_insert_rowid() FROM categories LIMIT 1;";
-
-            try (Connection connection = DBConnection.instance.getConnection();
-                 PreparedStatement insertStatement = connection.prepareStatement(insertQuery);
-                 PreparedStatement resultStatement = connection.prepareStatement(resultQuery)
-            ) {
+                // Add the CategoryRule to the database.
                 insertStatement.setString(1, categoryRule.getDescription());
                 insertStatement.setString(2, categoryRule.getIban());
                 insertStatement.setString(3, categoryRule.getType().toLowerCase());
@@ -156,6 +172,7 @@ public class CategoryRuleController {
                 insertStatement.setString(6, sessionID);
                 if (insertStatement.executeUpdate() != 1) {
                     response.setStatus(405);
+                    connection.rollback();
                     return null;
                 }
 
@@ -163,9 +180,11 @@ public class CategoryRuleController {
                 if (resultSet.next()) {
                     categoryRule.setId(resultSet.getInt(1));
                     response.setStatus(201);
+                    connection.commit();
                     return new GsonBuilder().create().toJson(categoryRule);
                 } else {
                     response.setStatus(405);
+                    connection.rollback();
                     return null;
                 }
             } catch (SQLException e) {
@@ -184,9 +203,9 @@ public class CategoryRuleController {
      * Returns a specific CategoryRule corresponding to the category rule ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category rule ID corresponding to the category rule to return
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category rule ID corresponding to the category rule to return
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the specified CategoryRule
      * @see CategoryRule
      */
@@ -217,9 +236,11 @@ public class CategoryRuleController {
                         resultSet.getString("type"),
                         resultSet.getInt("category_id"),
                         resultSet.getBoolean("apply_on_history"));
+                connection.commit();
                 return new GsonBuilder().create().toJson(result);
             } else {
                 response.setStatus(404);
+                connection.commit();
                 return null;
             }
         } catch (SQLException e) {
@@ -233,10 +254,10 @@ public class CategoryRuleController {
      * Updates the given category rule corresponding to the category rule ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category rule ID corresponding to the category rule to update
-     * @param body the request body containing the JSON representation of the CategoryRule to update
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category rule ID corresponding to the category rule to update
+     * @param body            the request body containing the JSON representation of the CategoryRule to update
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the updated CategoryRule
      * @see CategoryRule
      */
@@ -274,9 +295,11 @@ public class CategoryRuleController {
                 statement.setString(6, sessionID);
                 if (statement.executeUpdate() == 1) {
                     response.setStatus(200);
+                    connection.commit();
                     return new GsonBuilder().create().toJson(categoryRule);
                 } else {
                     response.setStatus(404);
+                    connection.rollback();
                     return null;
                 }
             } catch (SQLException e) {
@@ -295,9 +318,9 @@ public class CategoryRuleController {
      * Deletes the category rule corresponding to the given category rule ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category rule ID corresponding to the category to delete
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category rule ID corresponding to the category to delete
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      */
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
     public void deleteCategoryRule(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,

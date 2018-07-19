@@ -80,6 +80,7 @@ public class DBConnection {
     public Connection getConnection() throws SQLException {
         Connection connection = databasePool.getConnection();
         connection.createStatement().execute("PRAGMA foreign_keys = ON");
+        connection.setAutoCommit(false);
         return connection;
     }
 }

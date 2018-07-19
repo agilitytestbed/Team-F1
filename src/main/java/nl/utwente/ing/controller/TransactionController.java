@@ -50,11 +50,11 @@ public class TransactionController {
      * Returns a list of all the transactions that are available to the session ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param offset the number of items to skip before starting to collect the result set
-     * @param limit the amount of items to return
-     * @param category the category used to filter the transactions
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param offset          the number of items to skip before starting to collect the result set
+     * @param limit           the amount of items to return
+     * @param category        the category used to filter the transactions
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of all transactions
      * @see Transaction
      */
@@ -82,11 +82,9 @@ public class TransactionController {
 
         List<Transaction> transactions = new ArrayList<>();
 
-        try {
-
-            Connection connection = DBConnection.instance.getConnection();
-
-            PreparedStatement statement = connection.prepareStatement(transactionsQuery);
+        try (Connection connection = DBConnection.instance.getConnection();
+             PreparedStatement statement = connection.prepareStatement(transactionsQuery)
+        ) {
             statement.setString(1, sessionID);
 
             if (category != null) {
@@ -113,20 +111,19 @@ public class TransactionController {
                         result.getString("external_iban"),
                         Type.valueOf(result.getString("type")),
                         resultCategory
-                        ));
+                ));
             }
 
+            response.setStatus(200);
+            connection.commit();
+            GsonBuilder gsonBuilder = new GsonBuilder();
+            gsonBuilder.registerTypeAdapter(Transaction.class, new TransactionAdapter());
+            return gsonBuilder.create().toJson(transactions);
         } catch (SQLException e) {
             e.printStackTrace();
             response.setStatus(500);
             return null;
         }
-
-        response.setStatus(200);
-
-        GsonBuilder gsonBuilder = new GsonBuilder();
-        gsonBuilder.registerTypeAdapter(Transaction.class, new TransactionAdapter());
-        return gsonBuilder.create().toJson(transactions);
     }
 
     /**
@@ -134,9 +131,9 @@ public class TransactionController {
      * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours/1.2.1">API specification</a>.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param body the request body containing the JSON representation of the Transaction to add
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param body            the request body containing the JSON representation of the Transaction to add
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the newly added Transaction
      * @see Transaction
      */
@@ -173,13 +170,17 @@ public class TransactionController {
                         "AND (iban = ? OR iban = '') " +
                         "AND (type = ? OR type = '') " +
                         "AND (category_id IS NOT NULL) " + // In case the category was removed.
+                        "AND (session_id = ?) " +
                         "LIMIT 1), " +
                         "?, ?);";
             }
 
+            // Checks whether the given category_id was available to the current user.
+            String conditionQuery = "SELECT * FROM categories WHERE category_id = ? AND session_id = ?;";
             String resultQuery = "SELECT last_insert_rowid() FROM transactions LIMIT 1;";
 
             try (Connection connection = DBConnection.instance.getConnection();
+                 PreparedStatement conditionStatement = connection.prepareStatement(conditionQuery);
                  PreparedStatement resultStatement = connection.prepareStatement(resultQuery);
                  PreparedStatement statement = connection.prepareStatement(query)
             ) {
@@ -188,6 +189,19 @@ public class TransactionController {
                 statement.setString(3, transaction.getDescription());
                 statement.setString(4, transaction.getExternalIBAN());
                 if (transaction.getCategory() != null) {
+                    // Checks whether the given category_id was available to the current user.
+                    conditionStatement.setInt(1, transaction.getCategory().getId());
+                    conditionStatement.setString(2, sessionID);
+                    ResultSet conditionSet = conditionStatement.executeQuery();
+
+                    if (!conditionSet.isBeforeFirst()) {
+                        // We return 404 so users cannot tell whether a session exists or not when it is not owned by them.
+                        response.setStatus(404);
+                        connection.commit();
+                        return null;
+                    }
+
+                    // The category belongs to the user, so we can continue execution.
                     statement.setInt(5, transaction.getCategory().getId());
                     statement.setString(6, transaction.getType().toString().toLowerCase());
                     statement.setString(7, sessionID);
@@ -195,12 +209,14 @@ public class TransactionController {
                     statement.setString(5, transaction.getDescription());
                     statement.setString(6, transaction.getExternalIBAN());
                     statement.setString(7, transaction.getType().toString().toLowerCase());
-                    statement.setString(8, transaction.getType().toString().toLowerCase());
-                    statement.setString(9, sessionID);
+                    statement.setString(8, sessionID);
+                    statement.setString(9, transaction.getType().toString().toLowerCase());
+                    statement.setString(10, sessionID);
                 }
 
                 if (statement.executeUpdate() != 1) {
                     response.setStatus(405);
+                    connection.rollback();
                     return null;
                 }
 
@@ -208,10 +224,12 @@ public class TransactionController {
 
                 if (result.next()) {
                     response.setStatus(201); // Set the status for getTransaction - getTransaction won't overwrite it.
+                    connection.commit();
                     return getTransaction(headerSessionID, querySessionID, result.getInt(1), response);
                 }
 
                 response.setStatus(405);
+                connection.rollback();
                 return null;
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -229,9 +247,9 @@ public class TransactionController {
      * Returns a specific Transaction corresponding to the transaction ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param transactionID the transaction ID corresponding to the transaction to return
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param transactionID   the transaction ID corresponding to the transaction to return
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the specified Transaction
      * @see Transaction
      */
@@ -280,9 +298,11 @@ public class TransactionController {
 
                 GsonBuilder gsonBuilder = new GsonBuilder();
                 gsonBuilder.registerTypeAdapter(Transaction.class, new TransactionAdapter());
+                connection.commit();
                 return gsonBuilder.create().toJson(transaction);
             } else {
                 response.setStatus(404);
+                connection.rollback();
                 return null;
             }
         } catch (SQLException e) {
@@ -296,10 +316,10 @@ public class TransactionController {
      * Updates the given transaction corresponding to the transaction ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param transactionID the transaction ID corresponding to the transaction to update
-     * @param body the request body containing the JSON representation of the Transaction to update
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param transactionID   the transaction ID corresponding to the transaction to update
+     * @param body            the request body containing the JSON representation of the Transaction to update
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the updated Transaction
      * @see Transaction
      */
@@ -341,9 +361,11 @@ public class TransactionController {
                     response.setStatus(200);
                     // This uses the getTransaction endpoint instead of just serializing the transaction object ..
                     // .. as not all fields are known at time of creation (e.g. the Category).
+                    connection.commit();
                     return getTransaction(headerSessionID, querySessionID, transactionID, response);
                 } else {
                     response.setStatus(404);
+                    connection.rollback();
                     return null;
                 }
             } catch (SQLException e) {
@@ -362,9 +384,9 @@ public class TransactionController {
      * Deletes the transaction corresponding to the given transaction ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param transactionID the transaction ID corresponding to the transaction to delete
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param transactionID   the transaction ID corresponding to the transaction to delete
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      */
     @RequestMapping(value = "/{transactionId}", method = RequestMethod.DELETE)
     public void deleteTransaction(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
@@ -380,10 +402,10 @@ public class TransactionController {
      * Assigns a category to the specified transaction corresponding to the transaction ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param transactionID the transaction ID corresponding to the transaction to update
-     * @param body the request body containing the JSON representation of the Category to assign
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param transactionID   the transaction ID corresponding to the transaction to update
+     * @param body            the request body containing the JSON representation of the Category to assign
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a serialized representation of the newly added Transaction
      * @see Transaction
      */
@@ -405,16 +427,35 @@ public class TransactionController {
         }
 
         String query = "UPDATE transactions SET category_id = ? WHERE transaction_id = ? AND session_id = ?";
+        // Checks whether the given category_id was available to the current user.
+        String conditionQuery = "SELECT * FROM categories WHERE category_id = ? AND session_id = ?;";
+
         try (Connection connection = DBConnection.instance.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)
+             PreparedStatement statement = connection.prepareStatement(query);
+             PreparedStatement conditionStatement = connection.prepareStatement(conditionQuery)
         ) {
+            // Checks whether the given category_id was available to the current user.
+            conditionStatement.setInt(1, categoryId);
+            conditionStatement.setString(2, sessionID);
+            ResultSet conditionSet = conditionStatement.executeQuery();
+
+            // In case there were no results, the category is not owned by the user or does not exist, so return 404.
+            if (!conditionSet.isBeforeFirst()) {
+                // We return 404 so users cannot tell whether a session exists or not when it is not owned by them.
+                connection.commit();
+                response.setStatus(404);
+                return null;
+            }
+
             statement.setInt(1, categoryId);
             statement.setInt(2, transactionID);
             statement.setString(3, sessionID);
             if (statement.executeUpdate() == 1) {
+                connection.commit();
                 return getTransaction(headerSessionID, querySessionID, transactionID, response);
             } else {
                 response.setStatus(404);
+                connection.commit();
                 return null;
             }
         } catch (SQLException e) {

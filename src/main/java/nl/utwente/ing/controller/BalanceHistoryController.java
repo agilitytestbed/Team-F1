@@ -215,6 +215,7 @@ public class BalanceHistoryController {
 
             GsonBuilder gsonBuilder = new GsonBuilder();
             gsonBuilder.registerTypeAdapter(HistoryItem.class, new HistoryAdapter());
+            connection.commit();
             return gsonBuilder.create().toJson(historyItems);
         } catch (SQLException | ParseException e) {
             e.printStackTrace();
