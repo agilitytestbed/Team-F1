@@ -24,14 +24,34 @@
  */
 package nl.utwente.ing.model;
 
+import javax.persistence.*;
+
+@Entity
+@Table(name = "savingsgoals")
 public class SavingsGoal {
 
+    @Id
+    @GeneratedValue(generator="sqlite")
+    @TableGenerator(name="sqlite", table="sqlite_sequence", pkColumnName="name", valueColumnName="seq", pkColumnValue="savingsgoals")
     private Integer id;
+
     private String name;
     private Integer goal;
+
+    @Column(name = "monthly")
     private Integer savePerMonth;
+
+    @Column(name = "minbalance")
     private Integer minBalanceRequired;
+
     private Integer balance;
+
+    @ManyToOne(targetEntity = Session.class)
+    //@JoinColumn(name = "session_id", insertable = false, updatable = false)
+    @JoinColumn(name = "session_id")
+    private Session session;
+
+    public SavingsGoal() {}
 
     /**
      * Constructor to create a SavingGoal.
@@ -78,5 +98,9 @@ public class SavingsGoal {
 
     public void setBalance(Integer balance) {
         this.balance = balance;
+    }
+
+    public void setSession(Session session) {
+        this.session = session;
     }
 }

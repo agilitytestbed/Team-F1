@@ -27,68 +27,45 @@ package nl.utwente.ing.controller;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import nl.utwente.ing.controller.database.DBConnection;
-import nl.utwente.ing.controller.database.DBUtil;
+import nl.utwente.ing.model.Category;
 import nl.utwente.ing.model.CategoryRule;
+import nl.utwente.ing.model.Session;
+import nl.utwente.ing.service.CategoryRuleService;
+import nl.utwente.ing.service.CategoryService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/categoryRules")
 public class CategoryRuleController {
 
+    private final CategoryRuleService categoryRuleService;
+    private final CategoryService categoryService;
+
+    @Autowired
+    public CategoryRuleController(CategoryRuleService categoryRuleService, CategoryService categoryService) {
+        this.categoryRuleService = categoryRuleService;
+        this.categoryService = categoryService;
+    }
+
     /**
      * Returns a list of all the category rules that are available to the session ID.
      *
      * @param headerSessionID the session ID present in the header of the request
      * @param querySessionID  the session ID present in the URL of the request
-     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of all category rules
      * @see CategoryRule
      */
     @RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
     public String getCategoryRules(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
-                                   @RequestParam(value = "session_id", required = false) String querySessionID,
-                                   HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
+                                   @RequestParam(value = "session_id", required = false) String querySessionID) {
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
-        String query = "SELECT c.categoryrule_id, c.description, c.iban, c.type, c.category_id, c.apply_on_history " +
-                "FROM categoryrules c " +
-                "WHERE c.session_id = ?;";
-
-        try (Connection connection = DBConnection.instance.getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(query)
-        ) {
-            preparedStatement.setString(1, sessionID);
-            ResultSet resultSet = preparedStatement.executeQuery();
-
-            List<CategoryRule> results = new ArrayList<>();
-            while (resultSet.next()) {
-                results.add(new CategoryRule(
-                        resultSet.getInt("categoryrule_id"),
-                        resultSet.getString("description"),
-                        resultSet.getString("iban"),
-                        resultSet.getString("type"),
-                        resultSet.getInt("category_id"),
-                        resultSet.getBoolean("apply_on_history"))
-                );
-            }
-
-            response.setStatus(200);
-            connection.commit();
-            return new GsonBuilder().create().toJson(results);
-        } catch (SQLException e) {
-            e.printStackTrace();
-            response.setStatus(500);
-            return null;
-        }
+        List<CategoryRule> categoryRules = categoryRuleService.findBySession(session);
+        return new GsonBuilder().create().toJson(categoryRules);
     }
 
     /**
@@ -107,7 +84,7 @@ public class CategoryRuleController {
                                   @RequestParam(value = "session_id", required = false) String querySessionID,
                                   @RequestBody String body,
                                   HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         try {
             Gson gson = new Gson();
@@ -118,80 +95,23 @@ public class CategoryRuleController {
                 throw new JsonSyntaxException("CategoryRule is missing one or more elements");
             }
 
-            // This query matches either the empty string (wildcard value) or the exact value.
-            String updateQuery = "UPDATE transactions SET category_id = ? " +
-                    "WHERE (? = '' OR description = ?) " +
-                    "AND (? = '' OR external_iban = ?) " +
-                    "AND (? = '' OR type = ?)" +
-                    "AND session_id = ?;";
-            // Checks whether the given category_id was available to the current user.
-            String conditionQuery = "SELECT * FROM categories WHERE category_id = ? AND session_id = ?;";
-            String insertQuery = "INSERT INTO categoryrules (description, iban, type, category_id, apply_on_history, session_id) " +
-                    "VALUES (?, ?, ?, ?, ?, ?);";
-            String resultQuery = "SELECT last_insert_rowid() FROM categoryrules LIMIT 1;";
+            Category category = categoryService.findByIdAndSession(categoryRule.getCategoryId(), session);
 
-
-            try (Connection connection = DBConnection.instance.getConnection();
-                 PreparedStatement conditionStatement = connection.prepareStatement(conditionQuery);
-                 PreparedStatement updateStatement = connection.prepareStatement(updateQuery);
-                 PreparedStatement insertStatement = connection.prepareStatement(insertQuery);
-                 PreparedStatement resultStatement = connection.prepareStatement(resultQuery)
-            ) {
-                conditionStatement.setInt(1, categoryRule.getCategoryId());
-                conditionStatement.setString(2, sessionID);
-                ResultSet conditionSet = conditionStatement.executeQuery();
-
-                // Checks whether the given category_id was available to the current user.
-                if (!conditionSet.isBeforeFirst()) {
-                    // We return 404 so users cannot tell whether a session exists or not when it is not owned by them.
-                    response.setStatus(404);
-                    connection.commit();
-                    return null;
-                }
-
-                // Update the categories for existing transactions if applyOnHistory is true.
-                if (categoryRule.shouldApplyOnHistory()) {
-                    updateStatement.setInt(1, categoryRule.getCategoryId());
-                    updateStatement.setString(2, categoryRule.getDescription());
-                    updateStatement.setString(3, categoryRule.getDescription());
-                    updateStatement.setString(4, categoryRule.getIban());
-                    updateStatement.setString(5, categoryRule.getIban());
-                    updateStatement.setString(6, categoryRule.getType().toLowerCase());
-                    updateStatement.setString(7, categoryRule.getType().toLowerCase());
-                    updateStatement.setString(8, sessionID);
-                    updateStatement.executeUpdate();
-                    connection.commit();
-                }
-
-                // Add the CategoryRule to the database.
-                insertStatement.setString(1, categoryRule.getDescription());
-                insertStatement.setString(2, categoryRule.getIban());
-                insertStatement.setString(3, categoryRule.getType().toLowerCase());
-                insertStatement.setInt(4, categoryRule.getCategoryId());
-                insertStatement.setBoolean(5, categoryRule.shouldApplyOnHistory());
-                insertStatement.setString(6, sessionID);
-                if (insertStatement.executeUpdate() != 1) {
-                    response.setStatus(405);
-                    connection.rollback();
-                    return null;
-                }
-
-                ResultSet resultSet = resultStatement.executeQuery();
-                if (resultSet.next()) {
-                    categoryRule.setId(resultSet.getInt(1));
-                    response.setStatus(201);
-                    connection.commit();
-                    return new GsonBuilder().create().toJson(categoryRule);
-                } else {
-                    response.setStatus(405);
-                    connection.rollback();
-                    return null;
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                response.setStatus(500);
+            if (category == null) {
+                response.setStatus(404);
                 return null;
             }
+
+            categoryRule.setSession(session);
+            categoryRule.setCategory(category);
+            CategoryRule result = categoryRuleService.add(categoryRule);
+
+            if (result.shouldApplyOnHistory()) {
+                categoryRuleService.updateTransactions(result);
+            }
+
+            response.setStatus(201);
+            return new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create().toJson(result);
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
             response.setStatus(405);
@@ -214,39 +134,17 @@ public class CategoryRuleController {
                                   @RequestParam(value = "session_id", required = false) String querySessionID,
                                   @PathVariable("id") int id,
                                   HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
-        String query = "SELECT c.categoryrule_id, c.description, c.iban, c.type, c.category_id, c.apply_on_history " +
-                "FROM categoryrules c " +
-                "WHERE c.categoryrule_id = ? " +
-                "AND c.session_id = ?;";
+        CategoryRule result = categoryRuleService.findByIdAndSession(id, session);
 
-        try (Connection connection = DBConnection.instance.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)
-        ) {
-            statement.setInt(1, id);
-            statement.setString(2, sessionID);
-            ResultSet resultSet = statement.executeQuery();
-            if (resultSet.next()) {
-                response.setStatus(200);
-                CategoryRule result = new CategoryRule(
-                        resultSet.getInt("categoryrule_id"),
-                        resultSet.getString("description"),
-                        resultSet.getString("iban"),
-                        resultSet.getString("type"),
-                        resultSet.getInt("category_id"),
-                        resultSet.getBoolean("apply_on_history"));
-                connection.commit();
-                return new GsonBuilder().create().toJson(result);
-            } else {
-                response.setStatus(404);
-                connection.commit();
-                return null;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            response.setStatus(500);
+        if (result == null) {
+            response.setStatus(404);
             return null;
+        } else {
+            response.setStatus(200);
+            result.setCategoryId(result.getCategory().getId());
+            return new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create().toJson(result);
         }
     }
 
@@ -267,7 +165,7 @@ public class CategoryRuleController {
                                   @PathVariable("id") int id,
                                   @RequestBody String body,
                                   HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         try {
             Gson gson = new Gson();
@@ -279,32 +177,20 @@ public class CategoryRuleController {
                 throw new JsonSyntaxException("CategoryRule is missing one or more elements");
             }
 
+            Category category = categoryService.findByIdAndSession(categoryRule.getCategoryId(), session);
 
-            //String insertQuery = "INSERT INTO categoryrules (description, iban, type, category_id, apply_on_history, session_id) " +
-            String query = "UPDATE categoryrules SET description = ? , iban = ?, type = ?, category_id = ? " +
-                    "WHERE categoryrule_id = ? AND session_id = ?";
+            if (category == null) {
+                response.setStatus(404);
+                return null;
+            }
 
-            try (Connection connection = DBConnection.instance.getConnection();
-                 PreparedStatement statement = connection.prepareStatement(query)
-            ) {
-                statement.setString(1, categoryRule.getDescription());
-                statement.setString(2, categoryRule.getIban());
-                statement.setString(3, categoryRule.getType().toLowerCase());
-                statement.setInt(4, categoryRule.getCategoryId());
-                statement.setInt(5, id);
-                statement.setString(6, sessionID);
-                if (statement.executeUpdate() == 1) {
-                    response.setStatus(200);
-                    connection.commit();
-                    return new GsonBuilder().create().toJson(categoryRule);
-                } else {
-                    response.setStatus(404);
-                    connection.rollback();
-                    return null;
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                response.setStatus(500);
+            categoryRule.setSession(session);
+            categoryRule.setCategory(category);
+
+            if (categoryRuleService.update(categoryRule) == 1) {
+                return getCategoryRule(headerSessionID, querySessionID, id, response);
+            } else {
+                response.setStatus(404);
                 return null;
             }
         } catch (JsonSyntaxException e) {
@@ -327,8 +213,7 @@ public class CategoryRuleController {
                                    @RequestParam(value = "session_id", required = false) String querySessionID,
                                    @PathVariable("id") int id,
                                    HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
-        String query = "DELETE FROM categoryrules WHERE categoryrule_id = ? AND session_id = ?";
-        DBUtil.executeDelete(response, query, id, sessionID);
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
+        response.setStatus(categoryRuleService.delete(id, session) == 1 ? 204 : 404);
     }
 }

@@ -24,15 +24,38 @@
  */
 package nl.utwente.ing.model;
 
+import javax.persistence.*;
+
+@Entity
+@Table(name = "transactions")
 public class Transaction {
 
+    @Id
+    @Column(name = "transaction_id")
+    @GeneratedValue(generator="sqlite")
+    @TableGenerator(name="sqlite", table="sqlite_sequence", pkColumnName="name", valueColumnName="seq", pkColumnValue="transactions")
     private Integer id;
+
     private String date;
     private Long amount;
     private String description;
+
+    @Column(name = "external_iban")
     private String externalIBAN;
+
+    @Enumerated(EnumType.STRING)
     private Type type;
+
+    @ManyToOne(targetEntity = Category.class)
+    @JoinColumn(name = "category_id")
     private Category category;
+
+    @ManyToOne(targetEntity = Session.class)
+    //@JoinColumn(name = "session_id", insertable = false, updatable = false)
+    @JoinColumn(name = "session_id")
+    private Session session;
+
+    public Transaction() {}
 
     /**
      * Constructor to create a transaction without a category.
@@ -102,6 +125,10 @@ public class Transaction {
         this.amount = amount;
     }
 
+    public void setDescription(String description) {
+        this.description = description;
+    }
+
     public void setExternalIBAN(String externalIBAN) {
         this.externalIBAN = externalIBAN;
     }
@@ -112,5 +139,13 @@ public class Transaction {
 
     public void setCategory(Category category) {
         this.category = category;
+    }
+
+    public Session getSession() {
+        return session;
+    }
+
+    public void setSession(Session session) {
+        this.session = session;
     }
 }

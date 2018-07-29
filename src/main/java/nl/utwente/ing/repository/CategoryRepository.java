@@ -22,32 +22,28 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package nl.utwente.ing.model;
+package nl.utwente.ing.repository;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import nl.utwente.ing.model.Category;
+import nl.utwente.ing.model.Session;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.stereotype.Repository;
 
-@Entity
-@Table(name = "sessions")
-public class Session {
+import java.util.List;
 
-    @Id
-    @Column(name = "session_id")
-    private String sessionID;
+@Repository
+public interface CategoryRepository extends JpaRepository<Category, Long> {
 
-    public Session() {}
+    List<Category> findBySession(Session session);
 
-    public Session(String sessionID) {
-        this.sessionID = sessionID;
-    }
+    Category findByIdAndSession(int id, Session session);
 
-    public String getSessionID() {
-        return sessionID;
-    }
+    @Modifying
+    @Query("UPDATE Category SET name = :name WHERE id = :id AND session = :session")
+    int setCategoryNameByIdAndSession(@Param("name") String name, @Param("id") int id, @Param("session") Session session);
 
-    public void setSessionID(String sessionID) {
-        this.sessionID = sessionID;
-    }
+    int deleteByIdAndSession(int id, Session session);
 }

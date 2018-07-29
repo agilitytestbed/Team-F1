@@ -22,32 +22,39 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package nl.utwente.ing.model;
+package nl.utwente.ing.service;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import nl.utwente.ing.model.SavingsGoal;
+import nl.utwente.ing.model.Session;
+import nl.utwente.ing.repository.SavingsGoalRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-@Entity
-@Table(name = "sessions")
-public class Session {
+import java.util.List;
 
-    @Id
-    @Column(name = "session_id")
-    private String sessionID;
+@Service
+public class SavingsGoalService {
 
-    public Session() {}
+    private final SavingsGoalRepository savingsGoalRepository;
 
-    public Session(String sessionID) {
-        this.sessionID = sessionID;
+    @Autowired
+    public SavingsGoalService(SavingsGoalRepository savingsGoalRepository) {
+        this.savingsGoalRepository = savingsGoalRepository;
     }
 
-    public String getSessionID() {
-        return sessionID;
+    @Transactional
+    public SavingsGoal add(SavingsGoal savingsGoal) {
+        return savingsGoalRepository.save(savingsGoal);
     }
 
-    public void setSessionID(String sessionID) {
-        this.sessionID = sessionID;
+    @Transactional
+    public List<SavingsGoal> findBySession(Session session) {
+        return savingsGoalRepository.findBySession(session);
+    }
+
+    @Transactional
+    public int delete(int id, Session session) {
+        return savingsGoalRepository.deleteByIdAndSession(id, session);
     }
 }
