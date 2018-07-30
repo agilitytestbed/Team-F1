@@ -24,26 +24,56 @@
  */
 package nl.utwente.ing.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
+import javax.persistence.*;
+
+@Entity
+@Table(name = "categories")
 public class Category {
 
+    @Id
+    @Column(name = "category_id")
+    @GeneratedValue(generator="sqlite")
+    @TableGenerator(name="sqlite", table="sqlite_sequence", pkColumnName="name", valueColumnName="seq", pkColumnValue="categories")
     private Integer id;
+
+    @Column(name = "name")
     private String name;
+
+    @ManyToOne(targetEntity = Session.class)
+    @JoinColumn(name = "session_id")
+    @JsonIgnore
+    private Session session;
+
+    public Category() {}
 
     public Category(Integer id, String name) {
         this.id = id;
         this.name = name;
     }
 
-    public void setId(Integer id) {
-        this.id = id;
-    }
-
     public Integer getId() {
         return id;
+    }
+
+    public void setId(Integer id) {
+        this.id = id;
     }
 
     public String getName() {
         return name;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public Session getSession() {
+        return session;
+    }
+
+    public void setSession(Session session) {
+        this.session = session;
+    }
 }

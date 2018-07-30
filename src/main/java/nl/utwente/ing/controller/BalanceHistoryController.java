@@ -25,19 +25,20 @@
 package nl.utwente.ing.controller;
 
 import com.google.gson.*;
-import nl.utwente.ing.controller.database.DBConnection;
 import nl.utwente.ing.model.HistoryItem;
+import nl.utwente.ing.model.Session;
+import nl.utwente.ing.model.Transaction;
+import nl.utwente.ing.service.TransactionService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Type;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.*;
+import java.util.Calendar;
+import java.util.LinkedList;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/balance/history")
@@ -45,15 +46,22 @@ public class BalanceHistoryController {
 
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
+    private final TransactionService transactionService;
+
+    @Autowired
+    public BalanceHistoryController(TransactionService transactionService) {
+        this.transactionService = transactionService;
+    }
+
     /**
      * Returns the history of the balance of a bank account using candlestick datapoints. The result is formatted
      * according to the API specification: https://app.swaggerhub.com/apis/djhuistra/INGHonours-balanceHistory/
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param interval the interval period, such as a week or month
-     * @param count the number of interval items to return
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param interval        the interval period, such as a week or month
+     * @param count           the number of interval items to return
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the bank account's history.
      */
     @RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
@@ -62,7 +70,7 @@ public class BalanceHistoryController {
                                     @RequestParam(value = "interval", defaultValue = "month", required = false) String interval,
                                     @RequestParam(value = "intervals", defaultValue = "50", required = false) int count,
                                     HttpServletResponse response) {
-        String sessionID = headerSessionID != null ? headerSessionID : querySessionID;
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         // Intervals have a minimum of 1 and a maximum of 200.
         if (count < 1 || count > 200) {
@@ -73,70 +81,32 @@ public class BalanceHistoryController {
         Calendar calendar = Calendar.getInstance();
         int intervalType;
         switch (interval) {
-            case "hour":    intervalType = Calendar.HOUR;
+            case "hour":
+                intervalType = Calendar.HOUR;
                 break;
-            case "day":     intervalType = Calendar.DAY_OF_YEAR;
+            case "day":
+                intervalType = Calendar.DAY_OF_YEAR;
                 break;
-            case "week":    intervalType = Calendar.WEEK_OF_YEAR;
+            case "week":
+                intervalType = Calendar.WEEK_OF_YEAR;
                 break;
-            case "month":   intervalType = Calendar.MONTH;
+            case "month":
+                intervalType = Calendar.MONTH;
                 break;
-            case "year":    intervalType = Calendar.YEAR;
+            case "year":
+                intervalType = Calendar.YEAR;
                 break;
-            default:        response.setStatus(405);
+            default:
+                response.setStatus(405);
                 return null;
         }
 
-        // Set the calendar to the date of the earliest transaction possible.
-        // This is done so we don't fetch transactions that are not included in the history anyway.
         calendar.add(intervalType, count * -1);
 
-        // Select all transactions for the current user, starting at the earliest transaction.
-        String query = "SELECT DISTINCT date, amount, type " +
-                "FROM transactions " +
-                "WHERE session_id = ? " +
-                "AND date > ? " +
-                "ORDER BY date DESC";
-
-        // Get the close of the last group, which is effectively the current balance of the account.
-        String sumQuery = "SELECT (total_pos.total - total_neg.total) " +
-                "FROM (" +
-                "    (SELECT COALESCE(SUM(dep.amount), 0) AS total FROM transactions dep WHERE dep.type = \"deposit\" AND session_id = ? AND date < ?) AS total_pos,  " +
-                "    (SELECT COALESCE(SUM(with.amount), 0) AS total FROM transactions with WHERE with.type = \"withdrawal\" AND session_id = ? AND date < ?) AS total_neg " +
-                ")";
-
-        try (Connection connection = DBConnection.instance.getConnection();
-             PreparedStatement transactionsStatement = connection.prepareStatement(query);
-             PreparedStatement sumStatement = connection.prepareStatement(sumQuery);
-             PreparedStatement endSumStatement = connection.prepareStatement(sumQuery)
-        ){
-            // Setting up the transaction statement
-            transactionsStatement.setString(1, sessionID);
-            transactionsStatement.setString(2, DATE_FORMAT.format(calendar.getTime()));
-            // Setting up the sum statement
-            sumStatement.setString(1, sessionID);
-            sumStatement.setString(2, DATE_FORMAT.format(Calendar.getInstance().getTime()));
-            sumStatement.setString(3, sessionID);
-            sumStatement.setString(4, DATE_FORMAT.format(Calendar.getInstance().getTime()));
-            // Setting up the end sum statement
-            endSumStatement.setString(1, sessionID);
-            endSumStatement.setString(2, DATE_FORMAT.format(calendar.getTime()));
-            endSumStatement.setString(3, sessionID);
-            endSumStatement.setString(4, DATE_FORMAT.format(calendar.getTime()));
-
-            ResultSet transactionsSet = transactionsStatement.executeQuery();
-            ResultSet sumSet = sumStatement.executeQuery();
-            ResultSet endSumSet = endSumStatement.executeQuery();
-
-            long sum = 0;
-            while (sumSet.next()) {
-                sum = sumSet.getLong(1);
-            }
-
-            long endSum = 0;
-            while (endSumSet.next()) {
-                endSum = endSumSet.getLong(1);
-            }
+        try {
+            List<Transaction> transactions = transactionService.findBySessionAndDateAfterOrderByDateDesc(session, DATE_FORMAT.format(calendar.getTime()));
+            long sum = transactionService.findBalanceBySessionAndDate(session, DATE_FORMAT.format(Calendar.getInstance().getTime()));
+            long endSum = transactionService.findBalanceBySessionAndDate(session, DATE_FORMAT.format(calendar.getTime()));
 
             // Reset the calendar the the current date.
             calendar = Calendar.getInstance();
@@ -153,17 +123,17 @@ public class BalanceHistoryController {
             int groupCount = 0;
 
             // In case there are no transactions, fill the results with groups representing the sum and no movement.
-            if (transactionsSet.isAfterLast()) {
+            if (transactions.size() == 0) {
                 while (historyItems.size() < count) {
                     calendar.add(intervalType, -1);
                     historyItems.add(new HistoryItem(sum, calendar.getTimeInMillis() / 1000));
                 }
             }
 
-            while (transactionsSet.next()) {
+            for (Transaction transaction : transactions) {
                 // A calendar containing the date of the current transaction, used for comparing.
                 Calendar pointer = Calendar.getInstance();
-                pointer.setTime(DATE_FORMAT.parse(transactionsSet.getString("date")));
+                pointer.setTime(DATE_FORMAT.parse(transaction.getDate()));
 
                 while (calendar.after(pointer)) {
                     calendar.add(intervalType, -1);
@@ -171,8 +141,8 @@ public class BalanceHistoryController {
                     historyItems.add(currentItem);
                 }
 
-                long amount = transactionsSet.getLong("amount");
-                if ("withdrawal".equals(transactionsSet.getString("type"))) {
+                long amount = transaction.getAmount();
+                if (transaction.getType().equals(nl.utwente.ing.model.Type.withdrawal)) {
                     // Negate amount in case it was a withdrawal.
                     amount = amount * -1;
                 }
@@ -215,9 +185,8 @@ public class BalanceHistoryController {
 
             GsonBuilder gsonBuilder = new GsonBuilder();
             gsonBuilder.registerTypeAdapter(HistoryItem.class, new HistoryAdapter());
-            connection.commit();
             return gsonBuilder.create().toJson(historyItems);
-        } catch (SQLException | ParseException e) {
+        } catch (ParseException e) {
             e.printStackTrace();
             response.setStatus(500);
             return null;
