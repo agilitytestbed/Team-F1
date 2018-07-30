@@ -30,6 +30,7 @@ import com.google.gson.JsonSyntaxException;
 import nl.utwente.ing.model.SavingsGoal;
 import nl.utwente.ing.model.Session;
 import nl.utwente.ing.service.SavingsGoalService;
+import nl.utwente.ing.service.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
@@ -40,10 +41,12 @@ import javax.servlet.http.HttpServletResponse;
 public class SavingsGoalController {
 
     private final SavingsGoalService savingsGoalService;
+    private final TransactionService transactionService;
 
     @Autowired
-    public SavingsGoalController(SavingsGoalService savingsGoalService) {
+    public SavingsGoalController(SavingsGoalService savingsGoalService, TransactionService transactionService) {
         this.savingsGoalService = savingsGoalService;
+        this.transactionService = transactionService;
     }
 
     /**
@@ -84,6 +87,8 @@ public class SavingsGoalController {
             SavingsGoal savingsGoal = gson.fromJson(body, SavingsGoal.class);
             savingsGoal.setSession(session);
             savingsGoal.setBalance(0);
+            // Set the date to the most recent transaction (now).
+            savingsGoal.setDate(transactionService.findFirstByOrderByDateDesc().getDate());
 
             if (savingsGoal.getName() == null || savingsGoal.getGoal() == null
                     || savingsGoal.getSavePerMonth() == null) {
@@ -91,7 +96,7 @@ public class SavingsGoalController {
             }
 
             response.setStatus(201);
-            return new GsonBuilder().create().toJson(savingsGoalService.add(savingsGoal));
+            return new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create().toJson(savingsGoalService.add(savingsGoal));
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
             response.setStatus(405);

@@ -91,6 +91,11 @@ public class TransactionService {
     }
 
     @Transactional
+    public Transaction findFirstByOrderByDateDesc() {
+        return transactionRepository.findFirstByOrderByDateDesc();
+    }
+
+    @Transactional
     public int update(Transaction transaction) {
         return transactionRepository.updateTransaction(
                 transaction.getDate(),

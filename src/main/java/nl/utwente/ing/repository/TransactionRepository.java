@@ -48,6 +48,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
 
     List<Transaction> findBySessionAndDateAfterOrderByDateDesc(Session session, String date);
 
+    Transaction findFirstByOrderByDateDesc();
+
     @Query(value = "SELECT (total_pos.total - total_neg.total) " +
             "FROM (" +
             "    (SELECT COALESCE(SUM(dep.amount), 0) AS total FROM transactions dep WHERE dep.type = 'deposit' AND session_id = :sessionId AND date < :date) AS total_pos,  " +

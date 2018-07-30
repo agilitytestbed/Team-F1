@@ -24,6 +24,8 @@
  */
 package nl.utwente.ing.model;
 
+import com.google.gson.annotations.Expose;
+
 import javax.persistence.*;
 
 @Entity
@@ -33,18 +35,27 @@ public class SavingsGoal {
     @Id
     @GeneratedValue(generator="sqlite")
     @TableGenerator(name="sqlite", table="sqlite_sequence", pkColumnName="name", valueColumnName="seq", pkColumnValue="savingsgoals")
+    @Expose
     private Integer id;
 
+    @Expose
     private String name;
+
+    @Expose
     private Integer goal;
 
     @Column(name = "monthly")
+    @Expose
     private Integer savePerMonth;
 
     @Column(name = "minbalance")
+    @Expose
     private Integer minBalanceRequired;
 
+    @Expose
     private Integer balance;
+
+    private String date;
 
     @ManyToOne(targetEntity = Session.class)
     //@JoinColumn(name = "session_id", insertable = false, updatable = false)
@@ -98,6 +109,10 @@ public class SavingsGoal {
 
     public void setBalance(Integer balance) {
         this.balance = balance;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
     }
 
     public void setSession(Session session) {
