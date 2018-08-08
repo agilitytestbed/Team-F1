@@ -279,7 +279,12 @@ class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerialize
             throw new JsonParseException("Invalid date specified");
         }
 
-        Long amount = Long.valueOf(amountElement.getAsString().replace(".", ""));
+        Long amount;
+        if (amountElement.getAsString().contains(".")) {
+            amount = Long.valueOf(amountElement.getAsString().replace(".", ""));
+        } else {
+            amount = Long.valueOf(amountElement.getAsString()) * 100;
+        }
 
         // Description is not present in earlier versions of the API so might be left out, check for null for safety.
         JsonElement descriptionElement = jsonObject.get("description");
