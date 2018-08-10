@@ -50,8 +50,10 @@ public class Transaction {
     @JoinColumn(name = "category_id")
     private Category category;
 
+    @Transient
+    private Long currentBalance = 0L;
+
     @ManyToOne(targetEntity = Session.class)
-    //@JoinColumn(name = "session_id", insertable = false, updatable = false)
     @JoinColumn(name = "session_id")
     private Session session;
 
@@ -139,6 +141,14 @@ public class Transaction {
 
     public void setCategory(Category category) {
         this.category = category;
+    }
+
+    public Long getCurrentBalance() {
+        return currentBalance;
+    }
+
+    public void setCurrentBalance(Long currentBalance) {
+        this.currentBalance = currentBalance;
     }
 
     public Session getSession() {

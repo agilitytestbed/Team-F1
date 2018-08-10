@@ -64,30 +64,43 @@ public class TransactionService {
     }
 
     @Transactional
+    public List<Transaction> findBySession(Session session) {
+        return transactionRepository.findBySessionOrderByDateDesc(session);
+    }
+
+    @Transactional
+    public List<Transaction> findBySessionAsc(Session session) {
+        return transactionRepository.findBySessionOrderByDateAsc(session);
+    }
+
+    @Transactional
     public List<Transaction> findBySession(Session session, int offset, int limit) {
+        if (offset == 0 && limit == 0) {
+            return findBySession(session);
+        }
+
         OffsetLimitPageable pageable = new OffsetLimitPageable(offset, limit);
-        return transactionRepository.findBySession(session, pageable);
+        return transactionRepository.findBySessionOrderByDateDesc(session, pageable);
+    }
+
+    @Transactional
+    public List<Transaction> findBySessionAndCategoryName(Session session, String categoryName) {
+        return transactionRepository.findBySessionAndCategoryNameOrderByDateDesc(session, categoryName);
     }
 
     @Transactional
     public List<Transaction> findBySessionAndCategoryName(Session session, String categoryName, int offset, int limit) {
+        if (offset == 0 && limit == 0) {
+            return findBySessionAndCategoryName(session, categoryName);
+        }
+
         OffsetLimitPageable pageable = new OffsetLimitPageable(offset, limit);
-        return transactionRepository.findBySessionAndCategoryName(session, categoryName, pageable);
+        return transactionRepository.findBySessionAndCategoryNameOrderByDateDesc(session, categoryName, pageable);
     }
 
     @Transactional
     public Transaction findByIdAndSession(int id, Session session) {
         return transactionRepository.findByIdAndSession(id, session);
-    }
-
-    @Transactional
-    public List<Transaction> findBySessionAndDateAfterOrderByDateDesc(Session session, String date) {
-        return transactionRepository.findBySessionAndDateAfterOrderByDateDesc(session, date);
-    }
-
-    @Transactional
-    public Long findBalanceBySessionAndDate(Session session, String date) {
-        return transactionRepository.findBalanceBySessionAndDate(session.getSessionID(), date);
     }
 
     @Transactional

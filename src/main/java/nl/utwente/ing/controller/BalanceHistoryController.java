@@ -26,8 +26,10 @@ package nl.utwente.ing.controller;
 
 import com.google.gson.*;
 import nl.utwente.ing.model.HistoryItem;
+import nl.utwente.ing.model.SavingsGoal;
 import nl.utwente.ing.model.Session;
 import nl.utwente.ing.model.Transaction;
+import nl.utwente.ing.service.SavingsGoalService;
 import nl.utwente.ing.service.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -36,9 +38,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.lang.reflect.Type;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Calendar;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/v1/balance/history")
@@ -47,10 +47,12 @@ public class BalanceHistoryController {
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
     private final TransactionService transactionService;
+    private final SavingsGoalService savingsGoalService;
 
     @Autowired
-    public BalanceHistoryController(TransactionService transactionService) {
+    public BalanceHistoryController(TransactionService transactionService, SavingsGoalService savingsGoalService) {
         this.transactionService = transactionService;
+        this.savingsGoalService = savingsGoalService;
     }
 
     /**
@@ -78,7 +80,9 @@ public class BalanceHistoryController {
             return null;
         }
 
-        Calendar calendar = Calendar.getInstance();
+        GsonBuilder gsonBuilder = new GsonBuilder();
+        Gson gson = gsonBuilder.registerTypeAdapter(HistoryItem.class, new HistoryAdapter()).create();
+
         int intervalType;
         switch (interval) {
             case "hour":
@@ -101,15 +105,102 @@ public class BalanceHistoryController {
                 return null;
         }
 
-        calendar.add(intervalType, count * -1);
-
         try {
-            List<Transaction> transactions = transactionService.findBySessionAndDateAfterOrderByDateDesc(session, DATE_FORMAT.format(calendar.getTime()));
-            long sum = transactionService.findBalanceBySessionAndDate(session, DATE_FORMAT.format(Calendar.getInstance().getTime()));
-            long endSum = transactionService.findBalanceBySessionAndDate(session, DATE_FORMAT.format(calendar.getTime()));
+            List<Transaction> transactions = transactionService.findBySessionAsc(session);
 
-            // Reset the calendar the the current date.
-            calendar = Calendar.getInstance();
+            // In case there are no transactions, fill the results with empty groups.
+            if (transactions.isEmpty()) {
+                // Reset the date to the most recent transaction (now).
+                Calendar calendar = Calendar.getInstance();
+                calendar.setTime(DATE_FORMAT.parse(transactionService.findFirstByOrderByDateDesc().getDate()));
+
+                List<HistoryItem> historyItems = new LinkedList<>();
+                while (historyItems.size() < count) {
+                    calendar.add(intervalType, -1);
+                    historyItems.add(new HistoryItem(0, calendar.getTimeInMillis() / 1000));
+                }
+
+                return gson.toJson(historyItems);
+            }
+
+            List<SavingsGoal> savingsGoals = savingsGoalService.findBySession(session);
+            savingsGoals.forEach(s -> s.setBalance(0)); // Reset the balances of each goal so we can manually check whether they've been reached.
+
+            // Track the volume of savings for each transaction so we can retrieve them easily later on.
+            Map<Integer, Integer> savingVolumes = new HashMap<>();
+
+            // For each transaction we set the balance at that time of the transaction - taking into account the savings.
+            // This code is almost equal to the code in the SavingsGoalController, except we keep track of all states here.
+            for (int i = 0; i < transactions.size() - 1; i++) {
+                Transaction transaction = transactions.get(i);
+                Transaction nextTransaction = transactions.get(i + 1);
+
+                Calendar transactionDate = Calendar.getInstance();
+                transactionDate.setTime(DATE_FORMAT.parse(transaction.getDate()));
+
+                Calendar nextTransactionDate = Calendar.getInstance();
+                nextTransactionDate.setTime(DATE_FORMAT.parse(nextTransaction.getDate()));
+
+                if (transaction.getType().equals(nl.utwente.ing.model.Type.withdrawal)) {
+                    transaction.setCurrentBalance(transaction.getCurrentBalance() - transaction.getAmount());
+                } else {
+                    transaction.setCurrentBalance(transaction.getCurrentBalance() + transaction.getAmount());
+                }
+
+                // The next transaction starts with the value this transaction ended with (plus savings).
+                nextTransaction.setCurrentBalance(transaction.getCurrentBalance());
+
+                int monthsPassed = monthsPassed(transactionDate, nextTransactionDate);
+
+                for (int j = 0; j < monthsPassed; j++) {
+                    for (SavingsGoal savingsGoal : savingsGoals) {
+                        Calendar savingsGoalDate = Calendar.getInstance();
+                        savingsGoalDate.setTime(DATE_FORMAT.parse(savingsGoal.getDate()));
+
+                        // This savings goal is not valid yet.
+                        if (transactionDate.before(savingsGoalDate)) {
+                            continue;
+                        }
+
+                        // Ensure the requirements to process this saving have been met.
+                        if (nextTransaction.getCurrentBalance() >= savingsGoal.getMinBalanceRequired() && savingsGoal.getBalance() < savingsGoal.getGoal()) {
+                            nextTransaction.setCurrentBalance(nextTransaction.getCurrentBalance() - savingsGoal.getSavePerMonth());
+                            savingsGoal.setBalance(savingsGoal.getBalance() + savingsGoal.getSavePerMonth());
+
+                            if (savingVolumes.containsKey(nextTransaction.getId())) {
+                                savingVolumes.put(nextTransaction.getId(), savingVolumes.get(nextTransaction.getId()) + savingsGoal.getSavePerMonth());
+                            } else {
+                                savingVolumes.put(nextTransaction.getId(), savingsGoal.getSavePerMonth());
+                            }
+
+                            // In case we went over the goal, we set the balance to the goal and "refund" the difference.
+                            if (savingsGoal.getBalance() > savingsGoal.getGoal()) {
+                                nextTransaction.setCurrentBalance(nextTransaction.getCurrentBalance() + (savingsGoal.getBalance() - savingsGoal.getGoal()));
+                                savingsGoal.setBalance(savingsGoal.getGoal());
+
+                                savingVolumes.put(nextTransaction.getId(), savingVolumes.get(nextTransaction.getId()) - (savingsGoal.getBalance() - savingsGoal.getGoal()));
+                            }
+                        }
+                    }
+                }
+            }
+
+            // The last transaction still needs to be processed because the loop above goes until size - 1.
+            Transaction lastTransaction = transactions.get(transactions.size() - 1);
+            if (lastTransaction.getType().equals(nl.utwente.ing.model.Type.withdrawal)) {
+                lastTransaction.setCurrentBalance(lastTransaction.getCurrentBalance() - lastTransaction.getAmount());
+            } else {
+                lastTransaction.setCurrentBalance(lastTransaction.getCurrentBalance() + lastTransaction.getAmount());
+            }
+
+            // After processing the savings we can reverse the list, as balance history needs it in descending order.
+            Collections.reverse(transactions);
+
+            long balance = transactions.get(0).getCurrentBalance();
+
+            // Reset the date to the most recent transaction (now).
+            Calendar calendar = Calendar.getInstance();
+            calendar.setTime(DATE_FORMAT.parse(transactionService.findFirstByOrderByDateDesc().getDate()));
 
             // Set the reference calendar back one unit so we can find all transactions in that unit.
             calendar.add(intervalType, -1);
@@ -117,42 +208,32 @@ public class BalanceHistoryController {
             List<HistoryItem> historyItems = new LinkedList<>();
 
             // Create an initial HistoryItem with the balance of the account as values.
-            HistoryItem currentItem = new HistoryItem(sum, calendar.getTimeInMillis() / 1000);
+            HistoryItem currentItem = new HistoryItem(balance, calendar.getTimeInMillis() / 1000);
             historyItems.add(currentItem);
 
-            int groupCount = 0;
-
-            // In case there are no transactions, fill the results with groups representing the sum and no movement.
-            if (transactions.size() == 0) {
-                while (historyItems.size() < count) {
-                    calendar.add(intervalType, -1);
-                    historyItems.add(new HistoryItem(sum, calendar.getTimeInMillis() / 1000));
-                }
-            }
-
             for (Transaction transaction : transactions) {
+                balance = transaction.getCurrentBalance();
+
                 // A calendar containing the date of the current transaction, used for comparing.
                 Calendar pointer = Calendar.getInstance();
                 pointer.setTime(DATE_FORMAT.parse(transaction.getDate()));
 
                 while (calendar.after(pointer)) {
+                    // Check whether we have already filled all the slots.
+                    if (historyItems.size() >= count) {
+                        break;
+                    }
+
                     calendar.add(intervalType, -1);
                     currentItem = new HistoryItem(currentItem.getOpen(), calendar.getTimeInMillis() / 1000);
                     historyItems.add(currentItem);
                 }
 
-                long amount = transaction.getAmount();
-                if (transaction.getType().equals(nl.utwente.ing.model.Type.withdrawal)) {
-                    // Negate amount in case it was a withdrawal.
-                    amount = amount * -1;
-                }
-
                 if (pointer.before(calendar)) {
                     // We just entered a new group, we can stop adding to the old history item and create a new one.
-                    groupCount++;
 
                     // Stop once the maximum amount specified by the user has been reached.
-                    if (groupCount >= count) {
+                    if (historyItems.size() >= count) {
                         break;
                     }
 
@@ -162,8 +243,7 @@ public class BalanceHistoryController {
                     historyItems.add(currentItem);
                 }
 
-                // Update the open value, which is the "current" value.
-                currentItem.setOpen(currentItem.getOpen() - amount);
+                currentItem.setOpen(transaction.getCurrentBalance());
 
                 if (currentItem.getOpen() > currentItem.getHigh()) {
                     currentItem.setHigh(currentItem.getOpen());
@@ -173,24 +253,32 @@ public class BalanceHistoryController {
                     currentItem.setLow(currentItem.getOpen());
                 }
 
-                currentItem.setVolume(currentItem.getVolume() + Math.abs(amount));
+                currentItem.setVolume(
+                        currentItem.getVolume() +
+                        transaction.getAmount() +
+                        savingVolumes.getOrDefault(transaction.getId(), 0)
+                );
             }
 
             // In case not enough transactions were retrieved from the database to fill the count:
             // Similarly to the case of the empty set, create items of the last sum without any movement.
             while (historyItems.size() < count) {
                 calendar.add(intervalType, -1);
-                historyItems.add(new HistoryItem(endSum, calendar.getTimeInMillis() / 1000));
+                historyItems.add(new HistoryItem(balance, calendar.getTimeInMillis() / 1000));
             }
 
-            GsonBuilder gsonBuilder = new GsonBuilder();
-            gsonBuilder.registerTypeAdapter(HistoryItem.class, new HistoryAdapter());
-            return gsonBuilder.create().toJson(historyItems);
+            return gson.toJson(historyItems);
         } catch (ParseException e) {
             e.printStackTrace();
             response.setStatus(500);
             return null;
         }
+    }
+
+    private static int monthsPassed(Calendar start, Calendar end) {
+        int yearDiff = end.get(Calendar.YEAR) - start.get(Calendar.YEAR);
+        int monthDiff = end.get(Calendar.MONTH) - start.get(Calendar.MONTH);
+        return Math.abs((yearDiff * 12) + monthDiff);
     }
 }
 

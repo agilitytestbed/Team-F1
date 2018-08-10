@@ -40,22 +40,19 @@ import java.util.List;
 @Repository
 public interface TransactionRepository extends JpaRepository<Transaction, Long> {
 
-    List<Transaction> findBySession(Session session, Pageable pageable);
+    List<Transaction> findBySessionOrderByDateAsc(Session session);
 
-    List<Transaction> findBySessionAndCategoryName(Session session, String categoryName, Pageable pageable);
+    List<Transaction> findBySessionOrderByDateDesc(Session session);
+
+    List<Transaction> findBySessionOrderByDateDesc(Session session, Pageable pageable);
+
+    List<Transaction> findBySessionAndCategoryNameOrderByDateDesc(Session session, String categoryName);
+
+    List<Transaction> findBySessionAndCategoryNameOrderByDateDesc(Session session, String categoryName, Pageable pageable);
 
     Transaction findByIdAndSession(int id, Session session);
 
-    List<Transaction> findBySessionAndDateAfterOrderByDateDesc(Session session, String date);
-
     Transaction findFirstByOrderByDateDesc();
-
-    @Query(value = "SELECT (total_pos.total - total_neg.total) " +
-            "FROM (" +
-            "    (SELECT COALESCE(SUM(dep.amount), 0) AS total FROM transactions dep WHERE dep.type = 'deposit' AND session_id = :sessionId AND date < :date) AS total_pos,  " +
-            "    (SELECT COALESCE(SUM(with.amount), 0) AS total FROM transactions with WHERE with.type = 'withdrawal' AND session_id = :sessionId AND date < :date) AS total_neg " +
-            ")", nativeQuery =  true)
-    Long findBalanceBySessionAndDate(@Param("sessionId") String sessionId, @Param("date") String date);
 
     @Query(value = "SELECT last_insert_rowid() FROM transactions LIMIT 1", nativeQuery =  true)
     int findLastId();

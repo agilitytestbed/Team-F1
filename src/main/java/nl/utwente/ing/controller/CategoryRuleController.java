@@ -65,7 +65,7 @@ public class CategoryRuleController {
         Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         List<CategoryRule> categoryRules = categoryRuleService.findBySession(session);
-        return new GsonBuilder().create().toJson(categoryRules);
+        return new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create().toJson(categoryRules);
     }
 
     /**
