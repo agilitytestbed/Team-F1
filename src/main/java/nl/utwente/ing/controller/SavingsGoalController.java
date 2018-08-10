@@ -24,21 +24,27 @@
  */
 package nl.utwente.ing.controller;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonSyntaxException;
+import com.google.gson.*;
 import nl.utwente.ing.model.SavingsGoal;
 import nl.utwente.ing.model.Session;
+import nl.utwente.ing.model.Transaction;
+import nl.utwente.ing.model.Type;
 import nl.utwente.ing.service.SavingsGoalService;
 import nl.utwente.ing.service.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Calendar;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/savingGoals")
 public class SavingsGoalController {
+
+    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
     private final SavingsGoalService savingsGoalService;
     private final TransactionService transactionService;
@@ -59,9 +65,75 @@ public class SavingsGoalController {
      */
     @RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
     public String getSavingsGoals(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
-                                  @RequestParam(value = "session_id", required = false) String querySessionID) {
+                                  @RequestParam(value = "session_id", required = false) String querySessionID,
+                                  HttpServletResponse response) {
         Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
-        return new GsonBuilder().create().toJson(savingsGoalService.findBySession(session));
+
+        List<Transaction> transactions = transactionService.findBySessionAsc(session);
+        List<SavingsGoal> savingsGoals = savingsGoalService.findBySession(session);
+
+        long balance = 0;
+
+        try {
+            for (int i = 0; i < transactions.size() - 1; i++) {
+                Transaction transaction = transactions.get(i);
+                Calendar transactionDate = Calendar.getInstance();
+                transactionDate.setTime(DATE_FORMAT.parse(transaction.getDate()));
+
+                if (transaction.getType().equals(Type.withdrawal)) {
+                    balance -= transaction.getAmount();
+                } else {
+                    balance += transaction.getAmount();
+                }
+
+                int monthsPassed = monthsPassed(transaction, transactions.get(i + 1));
+
+                for (int j = 0; j < monthsPassed; j++) {
+                    for (SavingsGoal savingsGoal : savingsGoals) {
+                        Calendar savingsGoalDate = Calendar.getInstance();
+                        savingsGoalDate.setTime(DATE_FORMAT.parse(savingsGoal.getDate()));
+
+                        // This savings goal is not valid yet.
+                        if (transactionDate.before(savingsGoalDate)) {
+                            continue;
+                        }
+
+                        if (balance >= savingsGoal.getMinBalanceRequired() && savingsGoal.getBalance() < savingsGoal.getGoal()) {
+                            balance -= savingsGoal.getSavePerMonth();
+                            savingsGoal.setBalance(savingsGoal.getBalance() + savingsGoal.getSavePerMonth());
+
+                            // In case we went over the goal, we set the balance to the goal and "refund" the difference.
+                            if (savingsGoal.getBalance() > savingsGoal.getGoal()) {
+                                balance += (savingsGoal.getBalance() - savingsGoal.getGoal());
+                                savingsGoal.setBalance(savingsGoal.getGoal());
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (ParseException e) {
+            e.printStackTrace();
+            response.setStatus(500);
+            return null;
+        }
+
+        return new GsonBuilder()
+                .registerTypeAdapter(SavingsGoal.class, new SavingsGoalAdapter())
+                .excludeFieldsWithoutExposeAnnotation()
+                .create()
+                .toJson(savingsGoals);
+    }
+
+    private static int monthsPassed(Transaction first, Transaction second) throws ParseException {
+        Calendar start = Calendar.getInstance();
+        start.setTime(DATE_FORMAT.parse(first.getDate()));
+
+        Calendar end = Calendar.getInstance();
+        end.setTime(DATE_FORMAT.parse(second.getDate()));
+
+        int yearDiff = end.get(Calendar.YEAR) - start.get(Calendar.YEAR);
+        int monthDiff = end.get(Calendar.MONTH) - start.get(Calendar.MONTH);
+        return Math.abs((yearDiff * 12) + monthDiff);
     }
 
     /**
@@ -83,7 +155,10 @@ public class SavingsGoalController {
         Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         try {
-            Gson gson = new Gson();
+            GsonBuilder gsonBuilder = new GsonBuilder();
+            gsonBuilder.registerTypeAdapter(SavingsGoal.class, new SavingsGoalAdapter());
+            Gson gson = gsonBuilder.create();
+
             SavingsGoal savingsGoal = gson.fromJson(body, SavingsGoal.class);
             savingsGoal.setSession(session);
             savingsGoal.setBalance(0);
@@ -96,7 +171,11 @@ public class SavingsGoalController {
             }
 
             response.setStatus(201);
-            return new GsonBuilder().excludeFieldsWithoutExposeAnnotation().create().toJson(savingsGoalService.add(savingsGoal));
+            return new GsonBuilder()
+                    .registerTypeAdapter(SavingsGoal.class, new SavingsGoalAdapter())
+                    .excludeFieldsWithoutExposeAnnotation()
+                    .create()
+                    .toJson(savingsGoalService.add(savingsGoal));
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
             response.setStatus(405);
@@ -119,5 +198,79 @@ public class SavingsGoalController {
                                   HttpServletResponse response) {
         Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
         response.setStatus(savingsGoalService.delete(id, session) == 1 ? 204 : 404);
+    }
+}
+
+class SavingsGoalAdapter implements JsonDeserializer<SavingsGoal>, JsonSerializer<SavingsGoal> {
+
+    /**
+     * A custom deserializer for GSON to use to deserialize a SavingsGoal formatted according to the API specification
+     * to SavingsGoal object. Ensures that the amount field is properly converted to cents to work with the internally
+     * used format.
+     */
+    @Override
+    public SavingsGoal deserialize(JsonElement json, java.lang.reflect.Type type,
+                                   JsonDeserializationContext jsonDeserializationContext) throws JsonParseException {
+        JsonObject jsonObject = json.getAsJsonObject();
+
+        JsonElement nameElement = jsonObject.get("name");
+        JsonElement goalElement = jsonObject.get("goal");
+        JsonElement monthElement = jsonObject.get("savePerMonth");
+        JsonElement minBalanceElement = jsonObject.get("minBalanceRequired");
+
+        // Check whether all the fields are present to avoid NullPointerExceptions later on.
+        if (nameElement == null || goalElement == null || monthElement == null || minBalanceElement == null) {
+            throw new JsonParseException("Missing one or more required fields");
+        }
+
+        String name = nameElement.getAsString();
+
+        Integer goal;
+        if (goalElement.getAsString().contains(".")) {
+            goal = Integer.valueOf(goalElement.getAsString().replace(".", ""));
+        } else {
+            goal = Integer.valueOf(goalElement.getAsString()) * 100;
+        }
+
+        Integer month;
+        if (monthElement.getAsString().contains(".")) {
+            month = Integer.valueOf(monthElement.getAsString().replace(".", ""));
+        } else {
+            month = Integer.valueOf(monthElement.getAsString()) * 100;
+        }
+
+        Integer minBalance;
+        if (minBalanceElement.getAsString().contains(".")) {
+            minBalance = Integer.valueOf(minBalanceElement.getAsString().replace(".", ""));
+        } else {
+            minBalance = Integer.valueOf(minBalanceElement.getAsString()) * 100;
+        }
+
+        SavingsGoal savingsGoal = new SavingsGoal();
+        savingsGoal.setName(name);
+        savingsGoal.setGoal(goal);
+        savingsGoal.setSavePerMonth(month);
+        savingsGoal.setMinBalanceRequired(minBalance);
+        return savingsGoal;
+    }
+
+    /**
+     * A custom serializer for GSON to use to serialize a Transaction into the proper JSON representation formatted
+     * according to the API. Does not serialize null values unlike the default serializer. Formats the amount according
+     * to the specification as they are internally stored in a long as cents.
+     */
+    @Override
+    public JsonElement serialize(SavingsGoal savingsGoal, java.lang.reflect.Type type,
+                                 JsonSerializationContext jsonSerializationContext) {
+        JsonObject object = new JsonObject();
+
+        object.addProperty("id", savingsGoal.getId());
+        object.addProperty("name", savingsGoal.getName());
+        object.addProperty("goal", savingsGoal.getGoal() / 100.0);
+        object.addProperty("savePerMonth", savingsGoal.getSavePerMonth() / 100.0);
+        object.addProperty("minBalanceRequired", savingsGoal.getMinBalanceRequired() / 100.0);
+        object.addProperty("balance", savingsGoal.getBalance() / 100.0);
+
+        return object;
     }
 }

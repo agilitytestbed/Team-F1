@@ -58,7 +58,6 @@ public class SavingsGoal {
     private String date;
 
     @ManyToOne(targetEntity = Session.class)
-    //@JoinColumn(name = "session_id", insertable = false, updatable = false)
     @JoinColumn(name = "session_id")
     private Session session;
 
@@ -95,20 +94,44 @@ public class SavingsGoal {
         return name;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     public Integer getGoal() {
         return goal;
+    }
+
+    public void setGoal(Integer goal) {
+        this.goal = goal;
     }
 
     public Integer getSavePerMonth() {
         return savePerMonth;
     }
 
+    public void setSavePerMonth(Integer savePerMonth) {
+        this.savePerMonth = savePerMonth;
+    }
+
     public Integer getMinBalanceRequired() {
         return minBalanceRequired;
     }
 
+    public void setMinBalanceRequired(Integer minBalanceRequired) {
+        this.minBalanceRequired = minBalanceRequired;
+    }
+
+    public Integer getBalance() {
+        return balance;
+    }
+
     public void setBalance(Integer balance) {
         this.balance = balance;
+    }
+
+    public String getDate() {
+        return date;
     }
 
     public void setDate(String date) {
