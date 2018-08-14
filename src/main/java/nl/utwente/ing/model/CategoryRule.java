@@ -24,18 +24,50 @@
  */
 package nl.utwente.ing.model;
 
+import com.google.gson.annotations.Expose;
 import com.google.gson.annotations.SerializedName;
 
+import javax.persistence.*;
+
+@Entity
+@Table(name = "categoryrules")
 public class CategoryRule {
 
+    @Id
+    @Column(name = "categoryrule_id")
+    @GeneratedValue(generator="sqlite")
+    @TableGenerator(name="sqlite", table="sqlite_sequence", pkColumnName="name", valueColumnName="seq", pkColumnValue="categoryrules")
+    @Expose
     private Integer id;
+
+    @Expose
     private String description;
+
     @SerializedName("iBAN")
+    @Expose
     private String iban;
+
+    @Expose
     private String type; // A String is used instead of the "Type" object as other values can be used here as well.
+
     @SerializedName("category_id")
+    @Transient
+    @Expose
     private Integer categoryId;
+
+    @ManyToOne(targetEntity = Category.class)
+    @JoinColumn(name = "category_id")
+    private Category category;
+
+    @Column(name = "apply_on_history")
+    @Expose
     private boolean applyOnHistory;
+
+    @ManyToOne(targetEntity = Session.class)
+    @JoinColumn(name = "session_id")
+    private Session session;
+
+    public CategoryRule() {}
 
     /**
      * Constructor to create a CategoryRule.
@@ -81,7 +113,27 @@ public class CategoryRule {
         return categoryId;
     }
 
+    public void setCategoryId(Integer categoryId) {
+        this.categoryId = categoryId;
+    }
+
     public boolean shouldApplyOnHistory() {
         return applyOnHistory;
+    }
+
+    public Session getSession() {
+        return session;
+    }
+
+    public void setSession(Session session) {
+        this.session = session;
+    }
+
+    public Category getCategory() {
+        return category;
+    }
+
+    public void setCategory(Category category) {
+        this.category = category;
     }
 }

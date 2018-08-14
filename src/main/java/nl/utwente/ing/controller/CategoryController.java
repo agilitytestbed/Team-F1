@@ -26,55 +26,39 @@ package nl.utwente.ing.controller;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
-import nl.utwente.ing.controller.database.DBConnection;
-import nl.utwente.ing.controller.database.DBUtil;
 import nl.utwente.ing.model.Category;
+import nl.utwente.ing.model.Session;
+import nl.utwente.ing.service.CategoryService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import javax.servlet.http.HttpServletResponse;
-import java.sql.*;
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/categories")
 public class CategoryController {
 
+    private final CategoryService categoryService;
+
+    @Autowired
+    public CategoryController(CategoryService categoryService) {
+        this.categoryService = categoryService;
+    }
+
     /**
      * Returns a list of all the categories that are available to the session ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
      * @return a JSON serialized representation of all categories
      * @see Category
      */
     @RequestMapping(value = "", method = RequestMethod.GET)
     public List<Category> getCategories(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
-                                        @RequestParam(value = "session_id", required = false) String querySessionID,
-                                        HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
-
-        String query = "SELECT c.category_id, c.name FROM categories c WHERE c.session_id = ?;";
-        try (Connection connection = DBConnection.instance.getConnection();
-             PreparedStatement preparedStatement = connection.prepareStatement(query)
-        ){
-            preparedStatement.setString(1, sessionID);
-            ResultSet resultSet = preparedStatement.executeQuery();
-
-            List<Category> results = new ArrayList<>();
-            while (resultSet.next()) {
-                int id = resultSet.getInt(1);
-                String name = resultSet.getString(2);
-                results.add(new Category(id, name));
-            }
-
-            return results;
-        } catch (SQLException e) {
-            e.printStackTrace();
-            response.setStatus(500);
-            return null;
-        }
+                                        @RequestParam(value = "session_id", required = false) String querySessionID) {
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
+        return categoryService.findBySession(session);
     }
 
     /**
@@ -82,9 +66,9 @@ public class CategoryController {
      * to the <a href="https://app.swaggerhub.com/apis/djhuistra/INGHonours/1.2.1">API specification</a>.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param body the request body containing the JSON representation of the Category to add
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param body            the request body containing the JSON representation of the Category to add
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the newly added Category
      * @see Category
      */
@@ -93,44 +77,19 @@ public class CategoryController {
                                 @RequestParam(value = "session_id", required = false) String querySessionID,
                                 @RequestBody String body,
                                 HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         try {
             Gson gson = new Gson();
             Category category = gson.fromJson(body, Category.class);
+            category.setSession(session);
 
             if (category.getName() == null) {
                 throw new JsonSyntaxException("Category is missing name element");
             }
 
-            String insertQuery = "INSERT INTO categories (name, session_id) VALUES (?, ?);";
-            String resultQuery = "SELECT last_insert_rowid() FROM categories LIMIT 1;";
-
-            try (Connection connection = DBConnection.instance.getConnection();
-                 PreparedStatement insertStatement = connection.prepareStatement(insertQuery);
-                 PreparedStatement resultStatement = connection.prepareStatement(resultQuery)
-            ) {
-                insertStatement.setString(1, category.getName());
-                insertStatement.setString(2, sessionID);
-                if (insertStatement.executeUpdate() != 1) {
-                    response.setStatus(405);
-                    return null;
-                }
-
-                ResultSet resultSet = resultStatement.executeQuery();
-                if (resultSet.next()) {
-                    category.setId(resultSet.getInt(1));
-                    response.setStatus(201);
-                    return category;
-                } else {
-                    response.setStatus(405);
-                    return null;
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                response.setStatus(500);
-                return null;
-            }
+            response.setStatus(201);
+            return categoryService.add(category);
         } catch (JsonSyntaxException e) {
             e.printStackTrace();
             response.setStatus(405);
@@ -142,9 +101,9 @@ public class CategoryController {
      * Returns a specific Category corresponding to the category ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category ID corresponding to the category to return
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category ID corresponding to the category to return
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the specified Category
      * @see Category
      */
@@ -153,37 +112,20 @@ public class CategoryController {
                                 @RequestParam(value = "session_id", required = false) String querySessionID,
                                 @PathVariable("id") int id,
                                 HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
-        String query = "SELECT c.category_id, c.name FROM categories c WHERE category_id = ? AND session_id = ?";
-
-        try (Connection connection = DBConnection.instance.getConnection();
-             PreparedStatement statement = connection.prepareStatement(query)
-        ) {
-            statement.setInt(1, id);
-            statement.setString(2, sessionID);
-            ResultSet resultSet = statement.executeQuery();
-            if (resultSet.next()) {
-                response.setStatus(200);
-                return new Category(id, resultSet.getString(2));
-            } else {
-                response.setStatus(404);
-                return null;
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
-            response.setStatus(500);
-            return null;
-        }
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
+        Category result = categoryService.findByIdAndSession(id, session);
+        response.setStatus(result == null ? 404 : 200);
+        return result;
     }
 
     /**
      * Updates the given category corresponding to the category ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category ID corresponding to the category to update
-     * @param body the request body containing the JSON representation of the Category to update
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category ID corresponding to the category to update
+     * @param body            the request body containing the JSON representation of the Category to update
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      * @return a JSON serialized representation of the updated Category
      * @see Category
      */
@@ -193,35 +135,22 @@ public class CategoryController {
                                 @PathVariable("id") int id,
                                 @RequestBody String body,
                                 HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
 
         try {
             Gson gson = new Gson();
             Category category = gson.fromJson(body, Category.class);
             category.setId(id);
+            category.setSession(session);
 
             if (category.getName() == null) {
                 throw new JsonSyntaxException("Category is missing name element");
             }
 
-            String query = "UPDATE categories SET name = ? WHERE category_id = ? AND session_id = ?";
-
-            try (Connection connection = DBConnection.instance.getConnection();
-                 PreparedStatement statement = connection.prepareStatement(query)
-            ) {
-                statement.setString(1, category.getName());
-                statement.setInt(2, id);
-                statement.setString(3, sessionID);
-                if (statement.executeUpdate() == 1) {
-                    response.setStatus(200);
-                    return category;
-                } else {
-                    response.setStatus(404);
-                    return null;
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                response.setStatus(500);
+            if (categoryService.update(category) == 1) {
+                return getCategory(headerSessionID, querySessionID, id, response);
+            } else {
+                response.setStatus(404);
                 return null;
             }
         } catch (JsonSyntaxException e) {
@@ -235,17 +164,16 @@ public class CategoryController {
      * Deletes the category corresponding to the given category ID.
      *
      * @param headerSessionID the session ID present in the header of the request
-     * @param querySessionID the session ID present in the URL of the request
-     * @param id the category ID corresponding to the category to delete
-     * @param response the response shown to the user, necessary to edit the status code of the response
+     * @param querySessionID  the session ID present in the URL of the request
+     * @param id              the category ID corresponding to the category to delete
+     * @param response        the response shown to the user, necessary to edit the status code of the response
      */
     @RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
     public void deleteCategory(@RequestHeader(value = "X-session-ID", required = false) String headerSessionID,
                                @RequestParam(value = "session_id", required = false) String querySessionID,
                                @PathVariable("id") int id,
                                HttpServletResponse response) {
-        String sessionID = headerSessionID == null ? querySessionID : headerSessionID;
-        String query = "DELETE FROM categories WHERE category_id = ? AND session_id = ?";
-        DBUtil.executeDelete(response, query, id, sessionID);
+        Session session = new Session(headerSessionID == null ? querySessionID : headerSessionID);
+        response.setStatus(categoryService.delete(id, session) == 1 ? 204 : 404);
     }
 }

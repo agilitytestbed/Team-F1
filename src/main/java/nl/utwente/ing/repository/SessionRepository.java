@@ -22,32 +22,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package nl.utwente.ing.model;
+package nl.utwente.ing.repository;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import nl.utwente.ing.model.Session;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
-@Entity
-@Table(name = "sessions")
-public class Session {
+@Repository
+public interface SessionRepository extends JpaRepository<Session, Long> {
 
-    @Id
-    @Column(name = "session_id")
-    private String sessionID;
-
-    public Session() {}
-
-    public Session(String sessionID) {
-        this.sessionID = sessionID;
-    }
-
-    public String getSessionID() {
-        return sessionID;
-    }
-
-    public void setSessionID(String sessionID) {
-        this.sessionID = sessionID;
-    }
+    Session findBySessionID(String sessionID);
 }

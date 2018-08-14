@@ -22,32 +22,53 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package nl.utwente.ing.model;
+package nl.utwente.ing.service;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.Id;
-import javax.persistence.Table;
+import nl.utwente.ing.model.Category;
+import nl.utwente.ing.model.Session;
+import nl.utwente.ing.repository.CategoryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-@Entity
-@Table(name = "sessions")
-public class Session {
+import java.util.List;
 
-    @Id
-    @Column(name = "session_id")
-    private String sessionID;
+@Service
+public class CategoryService {
 
-    public Session() {}
+    private final CategoryRepository categoryRepository;
 
-    public Session(String sessionID) {
-        this.sessionID = sessionID;
+    @Autowired
+    public CategoryService(CategoryRepository categoryRepository) {
+        this.categoryRepository = categoryRepository;
     }
 
-    public String getSessionID() {
-        return sessionID;
+    @Transactional
+    public Category add(Category category) {
+        return categoryRepository.save(category);
     }
 
-    public void setSessionID(String sessionID) {
-        this.sessionID = sessionID;
+    @Transactional
+    public List<Category> findBySession(Session session) {
+        return categoryRepository.findBySession(session);
+    }
+
+    @Transactional
+    public Category findByIdAndSession(int id, Session session) {
+        return categoryRepository.findByIdAndSession(id, session);
+    }
+
+    @Transactional
+    public int update(Category category) {
+        return categoryRepository.setCategoryNameByIdAndSession(
+                category.getName(),
+                category.getId(),
+                category.getSession()
+        );
+    }
+
+    @Transactional
+    public int delete(int id, Session session) {
+        return categoryRepository.deleteByIdAndSession(id, session);
     }
 }
