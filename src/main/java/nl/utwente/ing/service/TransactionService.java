@@ -54,6 +54,7 @@ public class TransactionService {
                     transaction.getDescription(),
                     transaction.getExternalIBAN(),
                     transaction.getType().name(),
+                    transaction.getPaymentRequest() == null ? null : transaction.getPaymentRequest().getId(),
                     transaction.getSession().getSessionID()
             );
 

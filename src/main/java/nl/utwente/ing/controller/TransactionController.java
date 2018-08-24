@@ -25,11 +25,14 @@
 package nl.utwente.ing.controller;
 
 import com.google.gson.*;
+import java.util.List;
 import nl.utwente.ing.model.Category;
+import nl.utwente.ing.model.PaymentRequest;
 import nl.utwente.ing.model.Session;
 import nl.utwente.ing.model.Transaction;
 import nl.utwente.ing.model.Type;
 import nl.utwente.ing.service.CategoryService;
+import nl.utwente.ing.service.PaymentRequestService;
 import nl.utwente.ing.service.TransactionService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
@@ -44,11 +47,14 @@ public class TransactionController {
 
     private final TransactionService transactionService;
     private final CategoryService categoryService;
+    private final PaymentRequestService paymentRequestService;
 
     @Autowired
-    public TransactionController(TransactionService transactionService, CategoryService categoryService) {
+    public TransactionController(TransactionService transactionService, CategoryService categoryService,
+                                 PaymentRequestService paymentRequestService) {
         this.transactionService = transactionService;
         this.categoryService = categoryService;
+        this.paymentRequestService = paymentRequestService;
     }
 
     /**
@@ -109,6 +115,16 @@ public class TransactionController {
             if (transaction.getDate() == null || transaction.getAmount() == null || transaction.getExternalIBAN() ==
                     null || transaction.getType() == null) {
                 throw new JsonSyntaxException("Transaction is missing attributes");
+            }
+
+            if (transaction.getType() == Type.deposit) {
+                List<PaymentRequest> requests = paymentRequestService.findValidPaymentRequests(session,
+                        transaction.getDate(), transaction.getAmount());
+                for (PaymentRequest request : requests) {
+                    if (!request.isFilled()) {
+                        transaction.setPaymentRequest(request);
+                    }
+                }
             }
 
             response.setStatus(201);
@@ -252,7 +268,7 @@ class TransactionAdapter implements JsonDeserializer<Transaction>, JsonSerialize
 
     /**
      * A custom deserializer for GSON to use to deserialize a Transaction formatted according to the API specification
-     * to Transaction object. Ensures that the amount field is properly converted to cents to work with the internally
+     * to a Transaction object. Ensures that the amount field is properly converted to cents to work with the internally
      * used format.
      */
     @Override
