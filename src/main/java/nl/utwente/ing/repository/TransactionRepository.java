@@ -58,7 +58,7 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
     int findLastId();
 
     @Modifying
-    @Query(value = "INSERT INTO transactions (date, amount, description, external_iban, category_id, type, session_id) VALUES " +
+    @Query(value = "INSERT INTO transactions (date, amount, description, external_iban, category_id, type, payment_request_id, session_id) VALUES " +
             "(:date, :amount, :description, :externalIban, (SELECT category_id " +
             "FROM categoryrules " +
             "WHERE (description = :description OR description = '') " +
@@ -67,10 +67,11 @@ public interface TransactionRepository extends JpaRepository<Transaction, Long> 
             "AND (category_id IS NOT NULL) " +
             "AND (session_id = :sessionId) " +
             "LIMIT 1), " +
-            ":type, :sessionId)", nativeQuery = true)
+            ":type, :paymentRequestId, :sessionId)", nativeQuery = true)
     int addTransactionWithoutCategory(@Param("date") String date, @Param("amount") Long amount,
                                       @Param("description") String description, @Param("externalIban") String iban,
-                                      @Param("type") String type, @Param("sessionId") String sessionId);
+                                      @Param("type") String type, @Param("paymentRequestId") Integer paymentRequestId,
+                                      @Param("sessionId") String sessionId);
 
     @Modifying
     @Query("UPDATE Transaction SET date = :date, amount = :amount, description = :description, " +

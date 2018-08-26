@@ -25,6 +25,7 @@
 package nl.utwente.ing.model;
 
 import javax.persistence.*;
+import org.springframework.transaction.annotation.Transactional;
 
 @Entity
 @Table(name = "transactions")
@@ -52,6 +53,10 @@ public class Transaction {
 
     @Transient
     private Long currentBalance = 0L;
+
+    @ManyToOne(targetEntity = PaymentRequest.class)
+    @JoinColumn(name = "payment_request_id")
+    private PaymentRequest paymentRequest;
 
     @ManyToOne(targetEntity = Session.class)
     @JoinColumn(name = "session_id")
@@ -149,6 +154,14 @@ public class Transaction {
 
     public void setCurrentBalance(Long currentBalance) {
         this.currentBalance = currentBalance;
+    }
+
+    public PaymentRequest getPaymentRequest() {
+        return paymentRequest;
+    }
+
+    public void setPaymentRequest(PaymentRequest paymentRequest) {
+        this.paymentRequest = paymentRequest;
     }
 
     public Session getSession() {
