@@ -123,6 +123,7 @@ public class TransactionController {
                 for (PaymentRequest request : requests) {
                     if (!request.isFilled()) {
                         transaction.setPaymentRequest(request);
+                        break; // Stop after a match has been found.
                     }
                 }
             }
